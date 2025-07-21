@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.protsenko.cryptobridge.cryptobridge.dto.ExchangeTickersDTO;
 import net.protsenko.cryptobridge.cryptobridge.dto.PriceSpreadResult;
+import net.protsenko.cryptobridge.cryptobridge.dto.TickerData;
 import org.knowm.xchange.currency.CurrencyPair;
 import org.springframework.stereotype.Service;
 
@@ -16,13 +17,17 @@ public class PriceSpreadService {
 
     private final ExchangeService exchangeService;
 
-    public Optional<PriceSpreadResult> findMaxPriceSpreadForPair(CurrencyPair pair, List<ExchangeType> exchanges) {
+    public Optional<PriceSpreadResult> findMaxArbitrageSpreadForPair(
+            CurrencyPair pair,
+            List<ExchangeType> exchanges,
+            double minVolume
+    ) {
         List<ExchangeTickersDTO> tickersByExchange = exchangeService.getAllMarketDataForAllExchanges(
                 exchanges,
                 List.of(pair)
         );
 
-        Map<String, Double> pricesByExchange = new HashMap<>();
+        Map<String, TickerData> tickerDataMap = new HashMap<>();
 
         for (ExchangeTickersDTO dto : tickersByExchange) {
             if (dto == null || dto.tickers() == null) continue;
@@ -30,45 +35,44 @@ public class PriceSpreadService {
             dto.tickers().stream()
                     .filter(tickerDTO -> pair.equals(new CurrencyPair(tickerDTO.baseCurrency(), tickerDTO.counterCurrency())))
                     .findFirst()
-                    .ifPresent(tickerDTO -> pricesByExchange.put(dto.exchangeName(), tickerDTO.last()));
+                    .ifPresent(ticker -> {
+                        if (ticker.bid() > 0 && ticker.ask() > 0 && ticker.volume() >= minVolume) {
+                            tickerDataMap.put(dto.exchangeName(), new TickerData(ticker.bid(), ticker.ask(), ticker.volume()));
+                        }
+                    });
         }
 
-        if (pricesByExchange.size() < 2) {
+        if (tickerDataMap.size() < 2) {
             return Optional.empty();
         }
 
-        PriceSpreadResult maxSpread = getPriceSpreadResult(pair, pricesByExchange);
-
-        return Optional.ofNullable(maxSpread);
+        return findMaxSpread(pair, tickerDataMap);
     }
 
-    private PriceSpreadResult getPriceSpreadResult(CurrencyPair pair, Map<String, Double> pricesByExchange) {
-        List<Map.Entry<String, Double>> entries = new ArrayList<>(pricesByExchange.entrySet());
+    private Optional<PriceSpreadResult> findMaxSpread(CurrencyPair pair, Map<String, TickerData> tickerDataMap) {
+        var entries = new ArrayList<>(tickerDataMap.entrySet());
 
-        PriceSpreadResult maxSpread = null;
-        double maxDiff = 0.0;
+        return entries.stream()
+                .flatMap(eSell -> entries.stream()
+                        .filter(eBuy -> !eBuy.getKey().equals(eSell.getKey()))
+                        .map(eBuy -> new PriceSpreadCandidate(
+                                eBuy.getKey(), eBuy.getValue().ask(),
+                                eSell.getKey(), eSell.getValue().bid()
+                        ))
+                )
+                .filter(c -> c.spread() > 0)
+                .max(Comparator.comparingDouble(PriceSpreadCandidate::spread))
+                .map(c -> new PriceSpreadResult(
+                        pair,
+                        c.exchangeA, c.priceA,
+                        c.exchangeB, c.priceB,
+                        c.spread()
+                ));
+    }
 
-        for (int i = 0; i < entries.size(); i++) {
-            for (int j = i + 1; j < entries.size(); j++) {
-                var e1 = entries.get(i);
-                var e2 = entries.get(j);
-
-                double diff = Math.abs(e1.getValue() - e2.getValue());
-                if (diff > maxDiff) {
-                    maxDiff = diff;
-                    maxSpread = new PriceSpreadResult(
-                            pair,
-                            e1.getKey(),
-                            e1.getValue(),
-                            e2.getKey(),
-                            e2.getValue(),
-                            diff
-                    );
-                }
-            }
+    private record PriceSpreadCandidate(String exchangeA, double priceA, String exchangeB, double priceB) {
+        double spread() {
+            return priceB - priceA;
         }
-
-        return maxSpread;
     }
-
 }

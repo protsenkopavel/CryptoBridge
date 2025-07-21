@@ -20,7 +20,12 @@ public class PriceSpreadController {
 
     @GetMapping("/test")
     public PriceSpreadResult getSpreadsByExchangerAndTicker() {
-        return priceSpreadService.findMaxPriceSpreadForPair(CurrencyPair.BTC_USDT, List.of(ExchangeType.BYBIT, ExchangeType.BITGET))
+        return priceSpreadService.findMaxArbitrageSpreadForPair(
+                        CurrencyPair.BTC_USDT,
+                        List.of(ExchangeType.BYBIT, ExchangeType.BITGET),
+                        0.0
+
+                )
                 .orElse(null);
     }
 
