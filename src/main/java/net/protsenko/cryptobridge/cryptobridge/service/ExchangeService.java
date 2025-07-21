@@ -58,4 +58,9 @@ public class ExchangeService {
 
         return result;
     }
+
+    public List<ExchangeType> getAvailableExchanges() {
+        return List.of(ExchangeType.values());
+    }
+
 }
