@@ -2,6 +2,8 @@ package net.protsenko.cryptobridge.cryptobridge.controller;
 
 import lombok.RequiredArgsConstructor;
 import net.protsenko.cryptobridge.cryptobridge.service.ExchangeService;
+import net.protsenko.cryptobridge.cryptobridge.service.ExchangeType;
+import org.knowm.xchange.currency.CurrencyPair;
 import org.knowm.xchange.dto.marketdata.Ticker;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,7 +19,10 @@ public class ExchangeController {
 
     @GetMapping("test")
     public Map<String, List<Ticker>> getPublicMarketData() {
-        return exchangeService.getAllMarketDataForAllExchanges();
+        return exchangeService.getAllMarketDataForAllExchanges(
+                List.of(ExchangeType.BYBIT, ExchangeType.BITGET, ExchangeType.BITFINEX, ExchangeType.KUCOIN),
+                List.of(CurrencyPair.BTC_USDT, CurrencyPair.ETH_USDT)
+        );
     }
 
 }
