@@ -21,7 +21,7 @@ public class ExchangeController {
     @GetMapping("test")
     public List<ExchangeTickersDTO> getPublicMarketData() {
         return exchangeService.getAllMarketDataForAllExchanges(
-                List.of(ExchangeType.BYBIT, ExchangeType.BITGET, ExchangeType.BITFINEX, ExchangeType.KUCOIN),
+                List.of(ExchangeType.BYBIT, ExchangeType.BITGET, ExchangeType.KUCOIN),
                 List.of(CurrencyPair.BTC_USDT, CurrencyPair.ETH_USDT)
         );
     }

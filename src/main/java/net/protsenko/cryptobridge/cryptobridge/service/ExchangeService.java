@@ -6,10 +6,11 @@ import net.protsenko.cryptobridge.cryptobridge.dto.TickerDTO;
 import org.knowm.xchange.Exchange;
 import org.knowm.xchange.currency.CurrencyPair;
 import org.knowm.xchange.dto.marketdata.Ticker;
+import org.knowm.xchange.exceptions.ExchangeException;
+import org.knowm.xchange.instrument.Instrument;
 import org.knowm.xchange.service.marketdata.MarketDataService;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -65,15 +66,21 @@ public class ExchangeService {
             Exchange exchange = getOrCreateExchange(exchangeType);
             MarketDataService marketDataService = exchange.getMarketDataService();
 
-            List<CurrencyPair> pairsToQuery = filterCurrencyPairs(exchange, instruments);
+            List<Instrument> pairsToQuery = filterCurrencyPairs(exchange, instruments);
 
             List<TickerDTO> tickerDTOs = pairsToQuery.parallelStream()
                     .map(pair -> {
                         try {
                             Ticker ticker = marketDataService.getTicker(pair);
                             return TickerDTO.fromTicker(ticker);
-                        } catch (IOException e) {
-                            log.warn("Error fetching ticker for {} on {}: {}", pair, exchangeType, e.getMessage());
+                        } catch (ExchangeException ex) {
+                            log.error("ExchangeException for pair {} on {}: {}", pair, exchangeType, ex.getMessage());
+                            return null;
+                        } catch (IOException ioex) {
+                            log.error("IOException for pair {} on {}: {}", pair, exchangeType, ioex.getMessage());
+                            return null;
+                        } catch (Exception ex) {
+                            log.error("Unexpected error for pair {} on {}: {}", pair, exchangeType, ex.toString());
                             return null;
                         }
                     })
@@ -125,23 +132,29 @@ public class ExchangeService {
                 : exchanges;
     }
 
-    private Exchange getOrCreateExchange(ExchangeType exchangeType) {
-        return exchangeCache.computeIfAbsent(exchangeType, et -> {
+    private Exchange getOrCreateExchange(ExchangeType exchangeType) throws IOException {
+        Exchange exchange = exchangeCache.computeIfAbsent(exchangeType, et -> {
             try {
                 Exchange ex = et.createExchange();
                 ex.remoteInit();
                 return ex;
             } catch (IOException e) {
                 log.error("Error initializing exchange {}: {}", et, e.getMessage());
-                throw new RuntimeException(e);
+                return null;
             }
         });
+
+        if (exchange == null) {
+            log.error("Failed to create exchange {}", exchangeType);
+            throw new IOException("Failed to create exchange " + exchangeType);
+        }
+
+        return exchange;
     }
 
-    private List<CurrencyPair> filterCurrencyPairs(Exchange exchange, List<CurrencyPair> instrumentsFilter) {
+    private List<Instrument> filterCurrencyPairs(Exchange exchange, List<CurrencyPair> instrumentsFilter) {
         return exchange.getExchangeInstruments().stream()
                 .filter(instr -> instr instanceof CurrencyPair)
-                .map(instr -> (CurrencyPair) instr)
                 .filter(pair ->
                         instrumentsFilter == null
                                 || instrumentsFilter.isEmpty()
@@ -162,16 +175,10 @@ public class ExchangeService {
         return exchangeType.name() + ":" + instrumentsKey;
     }
 
-    @Scheduled(fixedRateString = "${exchange.cache.refresh-ms}")
     public void refreshCache() {
-        log.info("Starting scheduled cache refresh of market data");
-
         List<ExchangeType> allExchanges = List.of(ExchangeType.values());
         List<CurrencyPair> allPairs = null;
-
         getAllMarketDataForAllExchanges(allExchanges, allPairs);
-
-        log.info("Cache refresh complete");
     }
 
 }
