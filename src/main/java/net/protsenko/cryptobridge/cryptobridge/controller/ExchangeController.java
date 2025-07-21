@@ -32,4 +32,9 @@ public class ExchangeController {
         return exchangeService.getAvailableExchanges();
     }
 
+    @GetMapping("/available-pairs")
+    public List<CurrencyPair> getAvailablePairs() {
+        return exchangeService.getAvailableCurrencyPairs(List.of(ExchangeType.BYBIT));
+    }
+
 }

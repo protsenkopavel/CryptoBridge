@@ -9,10 +9,7 @@ import org.knowm.xchange.service.marketdata.MarketDataService;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Slf4j
 @Service
@@ -61,6 +58,34 @@ public class ExchangeService {
 
     public List<ExchangeType> getAvailableExchanges() {
         return List.of(ExchangeType.values());
+    }
+
+    public List<CurrencyPair> getAvailableCurrencyPairs(List<ExchangeType> exchanges) {
+        List<ExchangeType> exchangeTypes = (exchanges == null || exchanges.isEmpty())
+                ? List.of(ExchangeType.values())
+                : exchanges;
+
+        Set<CurrencyPair> pairsSet = new HashSet<>();
+
+        for (ExchangeType exchangeType : exchangeTypes) {
+            try {
+                Exchange exchange = exchangeType.createExchange();
+
+                List<Instrument> instruments = exchange.getExchangeInstruments();
+
+                instruments.stream()
+                        .filter(instr -> instr instanceof CurrencyPair)
+                        .map(instr -> (CurrencyPair) instr)
+                        .forEach(pairsSet::add);
+
+            } catch (Exception e) {
+                log.error("Error fetching instruments for exchange {}: {}", exchangeType, e.getMessage());
+            }
+        }
+
+        return pairsSet.stream()
+                .sorted(Comparator.comparing(CurrencyPair::toString))
+                .toList();
     }
 
 }
