@@ -25,6 +25,9 @@ repositories {
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.knowm.xchange:xchange-core:5.2.2")
+    implementation("org.knowm.xchange:xchange-bybit:5.2.2")
+
     compileOnly("org.projectlombok:lombok")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     annotationProcessor("org.projectlombok:lombok")
