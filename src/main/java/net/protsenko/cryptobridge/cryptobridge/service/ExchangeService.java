@@ -1,6 +1,8 @@
 package net.protsenko.cryptobridge.cryptobridge.service;
 
 import lombok.extern.slf4j.Slf4j;
+import net.protsenko.cryptobridge.cryptobridge.dto.ExchangeTickersDTO;
+import net.protsenko.cryptobridge.cryptobridge.dto.TickerDTO;
 import org.knowm.xchange.Exchange;
 import org.knowm.xchange.currency.CurrencyPair;
 import org.knowm.xchange.dto.marketdata.Ticker;
@@ -9,34 +11,60 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Slf4j
 @Service
 public class ExchangeService {
 
-    public Map<String, List<Ticker>> getAllMarketDataForAllExchanges(
+    private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+
+    public List<ExchangeTickersDTO> getAllMarketDataForAllExchanges(
             List<ExchangeType> exchanges,
             List<CurrencyPair> instruments
     ) {
         List<ExchangeType> exchangeTypes = normalizeExchanges(exchanges);
-        Map<String, List<Ticker>> result = new HashMap<>();
 
-        for (ExchangeType exchangeType : exchangeTypes) {
-            try {
-                Exchange exchange = createExchange(exchangeType);
-                MarketDataService marketDataService = exchange.getMarketDataService();
+        List<CompletableFuture<ExchangeTickersDTO>> futures = exchangeTypes.stream()
+                .map(exchangeType -> CompletableFuture.supplyAsync(
+                        () -> fetchExchangeTickers(exchangeType, instruments), executor)
+                )
+                .toList();
 
-                List<CurrencyPair> pairsToQuery = filterCurrencyPairs(exchange, instruments);
+        return futures.stream()
+                .map(CompletableFuture::join)
+                .filter(Objects::nonNull)
+                .toList();
+    }
 
-                List<Ticker> tickers = fetchTickers(marketDataService, exchangeType, pairsToQuery);
+    private ExchangeTickersDTO fetchExchangeTickers(ExchangeType exchangeType, List<CurrencyPair> instruments) {
+        try {
+            Exchange exchange = createExchange(exchangeType);
+            MarketDataService marketDataService = exchange.getMarketDataService();
 
-                result.put(exchangeType.name(), tickers);
-            } catch (Exception e) {
-                log.error("Error processing exchange {}: {}", exchangeType, e.getMessage(), e);
-            }
+            List<CurrencyPair> pairsToQuery = filterCurrencyPairs(exchange, instruments);
+
+            List<TickerDTO> tickerDTOs = pairsToQuery.parallelStream()
+                    .map(pair -> {
+                        try {
+                            Ticker ticker = marketDataService.getTicker(pair);
+                            return TickerDTO.fromTicker(ticker);
+                        } catch (IOException e) {
+                            log.warn("Error fetching ticker for {} on {}: {}", pair, exchangeType, e.getMessage());
+                            return null;
+                        }
+                    })
+                    .filter(Objects::nonNull)
+                    .toList();
+
+            return new ExchangeTickersDTO(exchangeType.name(), tickerDTOs);
+
+        } catch (Exception e) {
+            log.error("Error processing exchange {}: {}", exchangeType, e.getMessage(), e);
+            return null;
         }
-
-        return result;
     }
 
     public List<ExchangeType> getAvailableExchanges() {
