@@ -7,19 +7,29 @@ import org.knowm.xchange.Exchange;
 import org.knowm.xchange.currency.CurrencyPair;
 import org.knowm.xchange.dto.marketdata.Ticker;
 import org.knowm.xchange.service.marketdata.MarketDataService;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 public class ExchangeService {
 
+    private static final long cacheTtlSeconds = 300;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+    private final ValueOperations<String, ExchangeTickersDTO> valueOps;
+
+    public ExchangeService(RedisTemplate<String, ExchangeTickersDTO> redisTemplate) {
+        this.valueOps = redisTemplate.opsForValue();
+    }
 
     public List<ExchangeTickersDTO> getAllMarketDataForAllExchanges(
             List<ExchangeType> exchanges,
@@ -41,6 +51,14 @@ public class ExchangeService {
 
     private ExchangeTickersDTO fetchExchangeTickers(ExchangeType exchangeType, List<CurrencyPair> instruments) {
         try {
+            String cacheKey = generateCacheKey(exchangeType, instruments);
+
+            ExchangeTickersDTO cachedData = valueOps.get(cacheKey);
+            if (cachedData != null) {
+                log.debug("Cache hit for key {}", cacheKey);
+                return cachedData;
+            }
+
             Exchange exchange = createExchange(exchangeType);
             MarketDataService marketDataService = exchange.getMarketDataService();
 
@@ -59,8 +77,12 @@ public class ExchangeService {
                     .filter(Objects::nonNull)
                     .toList();
 
-            return new ExchangeTickersDTO(exchangeType.name(), tickerDTOs);
+            ExchangeTickersDTO dto = new ExchangeTickersDTO(exchangeType.name(), tickerDTOs);
 
+            valueOps.set(cacheKey, dto, Duration.ofSeconds(cacheTtlSeconds));
+            log.debug("Cache set for key {}", cacheKey);
+
+            return dto;
         } catch (Exception e) {
             log.error("Error processing exchange {}: {}", exchangeType, e.getMessage(), e);
             return null;
@@ -102,11 +124,13 @@ public class ExchangeService {
 
     private Exchange createExchange(ExchangeType exchangeType) throws IOException {
         Exchange exchange = exchangeType.createExchange();
+
         try {
             exchange.remoteInit();
         } catch (IOException e) {
             log.warn("Failed to remoteInit exchange {}: {}", exchangeType, e.getMessage());
         }
+
         return exchange;
     }
 
@@ -114,20 +138,24 @@ public class ExchangeService {
         return exchange.getExchangeInstruments().stream()
                 .filter(instr -> instr instanceof CurrencyPair)
                 .map(instr -> (CurrencyPair) instr)
-                .filter(pair -> instrumentsFilter == null || instrumentsFilter.isEmpty() || instrumentsFilter.contains(pair))
+                .filter(pair ->
+                        instrumentsFilter == null
+                                || instrumentsFilter.isEmpty()
+                                || instrumentsFilter.contains(pair))
                 .toList();
     }
 
-    private List<Ticker> fetchTickers(MarketDataService marketDataService, ExchangeType exchangeType, List<CurrencyPair> pairs) {
-        List<Ticker> tickers = new ArrayList<>();
-        for (CurrencyPair pair : pairs) {
-            try {
-                Ticker ticker = marketDataService.getTicker(pair);
-                tickers.add(ticker);
-            } catch (IOException e) {
-                log.warn("Error fetching ticker for {} on {}: {}", pair, exchangeType, e.getMessage());
-            }
+    private String generateCacheKey(ExchangeType exchangeType, List<CurrencyPair> instruments) {
+        if (instruments == null || instruments.isEmpty()) {
+            return exchangeType.name() + ":ALL";
         }
-        return tickers;
+
+        String instrumentsKey = instruments.stream()
+                .map(CurrencyPair::toString)
+                .sorted()
+                .collect(Collectors.joining(","));
+
+        return exchangeType.name() + ":" + instrumentsKey;
     }
+
 }

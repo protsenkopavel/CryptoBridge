@@ -25,6 +25,8 @@ repositories {
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-data-redis")
+
     implementation("org.knowm.xchange:xchange-core:5.2.2")
     implementation("org.knowm.xchange:xchange-bybit:5.2.2")
     implementation("org.knowm.xchange:xchange-binance:5.2.2")

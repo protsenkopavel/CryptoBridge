@@ -13,8 +13,8 @@ public record TickerDTO(
 ) {
     public static TickerDTO fromTicker(Ticker ticker) {
         return new TickerDTO(
-                ticker.getCurrencyPair().getBase().getCurrencyCode(),
-                ticker.getCurrencyPair().getCounter().getCurrencyCode(),
+                ticker.getInstrument().getBase().getCurrencyCode(),
+                ticker.getInstrument().getCounter().getCurrencyCode(),
                 ticker.getLast().doubleValue(),
                 ticker.getBid().doubleValue(),
                 ticker.getAsk().doubleValue(),
