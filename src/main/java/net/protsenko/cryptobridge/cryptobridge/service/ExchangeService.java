@@ -9,12 +9,14 @@ import org.knowm.xchange.dto.marketdata.Ticker;
 import org.knowm.xchange.service.marketdata.MarketDataService;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
@@ -26,6 +28,7 @@ public class ExchangeService {
     private static final long cacheTtlSeconds = 300;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
     private final ValueOperations<String, ExchangeTickersDTO> valueOps;
+    private final Map<ExchangeType, Exchange> exchangeCache = new ConcurrentHashMap<>();
 
     public ExchangeService(RedisTemplate<String, ExchangeTickersDTO> redisTemplate) {
         this.valueOps = redisTemplate.opsForValue();
@@ -59,7 +62,7 @@ public class ExchangeService {
                 return cachedData;
             }
 
-            Exchange exchange = createExchange(exchangeType);
+            Exchange exchange = getOrCreateExchange(exchangeType);
             MarketDataService marketDataService = exchange.getMarketDataService();
 
             List<CurrencyPair> pairsToQuery = filterCurrencyPairs(exchange, instruments);
@@ -99,7 +102,7 @@ public class ExchangeService {
 
         for (ExchangeType exchangeType : exchangeTypes) {
             try {
-                Exchange exchange = createExchange(exchangeType);
+                Exchange exchange = getOrCreateExchange(exchangeType);
                 pairsSet.addAll(
                         exchange.getExchangeInstruments().stream()
                                 .filter(instr -> instr instanceof CurrencyPair)
@@ -122,16 +125,17 @@ public class ExchangeService {
                 : exchanges;
     }
 
-    private Exchange createExchange(ExchangeType exchangeType) throws IOException {
-        Exchange exchange = exchangeType.createExchange();
-
-        try {
-            exchange.remoteInit();
-        } catch (IOException e) {
-            log.warn("Failed to remoteInit exchange {}: {}", exchangeType, e.getMessage());
-        }
-
-        return exchange;
+    private Exchange getOrCreateExchange(ExchangeType exchangeType) {
+        return exchangeCache.computeIfAbsent(exchangeType, et -> {
+            try {
+                Exchange ex = et.createExchange();
+                ex.remoteInit();
+                return ex;
+            } catch (IOException e) {
+                log.error("Error initializing exchange {}: {}", et, e.getMessage());
+                throw new RuntimeException(e);
+            }
+        });
     }
 
     private List<CurrencyPair> filterCurrencyPairs(Exchange exchange, List<CurrencyPair> instrumentsFilter) {
@@ -156,6 +160,18 @@ public class ExchangeService {
                 .collect(Collectors.joining(","));
 
         return exchangeType.name() + ":" + instrumentsKey;
+    }
+
+    @Scheduled(fixedRateString = "${exchange.cache.refresh-ms}")
+    public void refreshCache() {
+        log.info("Starting scheduled cache refresh of market data");
+
+        List<ExchangeType> allExchanges = List.of(ExchangeType.values());
+        List<CurrencyPair> allPairs = null;
+
+        getAllMarketDataForAllExchanges(allExchanges, allPairs);
+
+        log.info("Cache refresh complete");
     }
 
 }
