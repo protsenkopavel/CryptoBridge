@@ -7,6 +7,7 @@ import org.knowm.xchange.currency.CurrencyPair;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -25,14 +26,26 @@ public class PriceSpreadService {
             currencyPairs = parseCurrencyPairs(spreadsRq.pairs());
         }
 
-        List<PriceSpreadResult> results = new ArrayList<>();
+        List<ExchangeTickersDTO> allTickers = exchangeService.getAllMarketDataForAllExchanges(exchangeTypes, currencyPairs);
 
-        for (CurrencyPair pair : currencyPairs) {
-            findMaxArbitrageSpreadForPair(pair, exchangeTypes, spreadsRq.minVolume(), spreadsRq.minProfitPercent())
-                    .ifPresent(results::add);
+        Map<CurrencyPair, Map<String, TickerData>> tickersByPair = new HashMap<>();
+        for (ExchangeTickersDTO exchangeTickers : allTickers) {
+            if (exchangeTickers == null || exchangeTickers.tickers() == null) continue;
+            for (TickerDTO ticker : exchangeTickers.tickers()) {
+                if (ticker.bid() > 0 && ticker.ask() > 0 && ticker.volume() >= spreadsRq.minVolume()) {
+                    CurrencyPair pair = new CurrencyPair(ticker.baseCurrency(), ticker.counterCurrency());
+                    tickersByPair
+                            .computeIfAbsent(pair, k -> new HashMap<>())
+                            .put(exchangeTickers.exchangeName(), new TickerData(ticker.bid(), ticker.ask(), ticker.volume()));
+                }
+            }
         }
 
-        return results;
+        return tickersByPair.entrySet().parallelStream()
+                .map(entry -> findMaxSpread(entry.getKey(), entry.getValue(), spreadsRq.minProfitPercent()))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .collect(Collectors.toList());
     }
 
     public Optional<PriceSpreadResult> findMaxArbitrageSpreadForPair(

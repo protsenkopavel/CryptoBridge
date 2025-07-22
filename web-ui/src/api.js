@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const api = axios.create({
     baseURL: '/api/v1',
-    timeout: 120000,
+    timeout: 12000000,
 });
 
 export const fetchAvailableExchanges = () => api.get('/scanner/available-exchanges').then(res => res.data);
