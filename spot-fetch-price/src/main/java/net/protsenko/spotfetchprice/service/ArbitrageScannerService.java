@@ -33,7 +33,7 @@ public class ArbitrageScannerService {
                                 spread.buyPrice(),
                                 spread.sellExchange(),
                                 spread.sellPrice(),
-                                String.format("%.2f", spread.spreadPercent()));
+                                spread.spreadPercentage());
                     });
         }
 

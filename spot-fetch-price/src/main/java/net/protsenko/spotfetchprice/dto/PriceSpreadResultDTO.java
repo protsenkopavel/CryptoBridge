@@ -2,7 +2,7 @@ package net.protsenko.spotfetchprice.dto;
 
 import org.knowm.xchange.instrument.Instrument;
 
-public record PriceSpreadResult(
+public record PriceSpreadResultDTO(
         Instrument instrument,
         String buyExchange,
         double buyPrice,

@@ -1,11 +1,13 @@
 package net.protsenko.spotfetchprice.controller;
 
 import lombok.RequiredArgsConstructor;
-import net.protsenko.spotfetchprice.dto.PriceSpreadResult;
-import net.protsenko.spotfetchprice.service.ExchangeType;
+import net.protsenko.spotfetchprice.dto.PriceSpreadResultDTO;
+import net.protsenko.spotfetchprice.dto.SpreadsRq;
+import net.protsenko.spotfetchprice.mapper.ServiceMapper;
 import net.protsenko.spotfetchprice.service.PriceSpreadService;
-import org.knowm.xchange.currency.CurrencyPair;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -17,17 +19,11 @@ import java.util.List;
 public class PriceSpreadController {
 
     private final PriceSpreadService priceSpreadService;
+    private final ServiceMapper serviceMapper;
 
-    @GetMapping("/test")
-    public PriceSpreadResult getSpreadsByExchangerAndTicker() {
-        return priceSpreadService.findMaxArbitrageSpreadForPair(
-                        CurrencyPair.BTC_USDT,
-                        List.of(ExchangeType.BYBIT, ExchangeType.BITGET),
-                        0.0,
-                        1.0
-
-                )
-                .orElse(null);
+    @GetMapping("/best-spreads")
+    public List<PriceSpreadResultDTO> getSpreadsByExchangerAndTicker(@RequestBody @Validated SpreadsRq spreadsRq) {
+        return serviceMapper.toDto(priceSpreadService.findMaxArbitrageSpreadsForPairs(spreadsRq));
     }
 
 }

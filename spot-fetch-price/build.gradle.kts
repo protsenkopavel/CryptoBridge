@@ -39,6 +39,8 @@ dependencies {
     implementation("org.knowm.xchange:xchange-deribit:5.2.2")
     implementation("org.knowm.xchange:xchange-bitfinex:5.2.2")
 
+    implementation("org.mapstruct:mapstruct:1.6.3")
+    annotationProcessor("org.mapstruct:mapstruct-processor:1.6.3")
     compileOnly("org.projectlombok:lombok")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     annotationProcessor("org.projectlombok:lombok")

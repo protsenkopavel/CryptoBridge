@@ -2,9 +2,7 @@ package net.protsenko.spotfetchprice.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import net.protsenko.spotfetchprice.dto.ExchangeTickersDTO;
-import net.protsenko.spotfetchprice.dto.PriceSpreadResult;
-import net.protsenko.spotfetchprice.dto.TickerData;
+import net.protsenko.spotfetchprice.dto.*;
 import org.knowm.xchange.currency.CurrencyPair;
 import org.springframework.stereotype.Service;
 
@@ -15,7 +13,27 @@ import java.util.*;
 @RequiredArgsConstructor
 public class PriceSpreadService {
 
-    private final net.protsenko.spotfetchprice.service.ExchangeService exchangeService;
+    private final ExchangeService exchangeService;
+
+    public List<PriceSpreadResult> findMaxArbitrageSpreadsForPairs(SpreadsRq spreadsRq) {
+        List<ExchangeType> exchangeTypes = parseExchangeTypes(spreadsRq.exchanges());
+
+        List<CurrencyPair> currencyPairs;
+        if (spreadsRq.pairs() == null || spreadsRq.pairs().isEmpty()) {
+            currencyPairs = exchangeService.getAvailableCurrencyPairs(exchangeTypes);
+        } else {
+            currencyPairs = parseCurrencyPairs(spreadsRq.pairs());
+        }
+
+        List<PriceSpreadResult> results = new ArrayList<>();
+
+        for (CurrencyPair pair : currencyPairs) {
+            findMaxArbitrageSpreadForPair(pair, exchangeTypes, spreadsRq.minVolume(), spreadsRq.minProfitPercent())
+                    .ifPresent(results::add);
+        }
+
+        return results;
+    }
 
     public Optional<PriceSpreadResult> findMaxArbitrageSpreadForPair(
             CurrencyPair pair,
@@ -67,21 +85,43 @@ public class PriceSpreadService {
                 )
                 .filter(c -> c.spread() > 0)
                 .filter(c -> {
-                    double profitPercent = (c.priceB - c.priceA) / c.priceA * 100.0;
+                    double profitPercent = (c.sellPrice() - c.buyPrice()) / c.buyPrice() * 100.0;
                     return profitPercent >= minProfitPercent;
                 })
                 .max(Comparator.comparingDouble(PriceSpreadCandidate::spread))
                 .map(c -> new PriceSpreadResult(
                         pair,
-                        c.exchangeA, c.priceA,
-                        c.exchangeB, c.priceB,
-                        c.spread()
+                        c.buyExchange(), c.buyPrice(),
+                        c.sellExchange(), c.sellPrice(),
+                        c.spread(),
+                        (c.sellPrice() - c.buyPrice()) / c.buyPrice() * 100.0
                 ));
     }
 
-    private record PriceSpreadCandidate(String exchangeA, double priceA, String exchangeB, double priceB) {
-        double spread() {
-            return priceB - priceA;
+    public List<ExchangeType> parseExchangeTypes(List<String> exchanges) {
+        if (exchanges == null || exchanges.isEmpty()) {
+            return exchangeService.getAvailableExchanges();
         }
+        return exchanges.stream()
+                .map(ExchangeType::valueOf)
+                .toList();
     }
+
+    public List<CurrencyPair> parseCurrencyPairs(List<String> pairs) {
+        if (pairs == null || pairs.isEmpty()) {
+            throw new IllegalArgumentException("Currency pairs list is empty or null");
+        }
+        return pairs.stream()
+                .map(this::parseCurrencyPair)
+                .toList();
+    }
+
+    private CurrencyPair parseCurrencyPair(String pairStr) {
+        String[] parts = pairStr.split("_");
+        if (parts.length != 2) {
+            throw new IllegalArgumentException("Invalid currency pair format: " + pairStr);
+        }
+        return new CurrencyPair(parts[0], parts[1]);
+    }
+
 }
