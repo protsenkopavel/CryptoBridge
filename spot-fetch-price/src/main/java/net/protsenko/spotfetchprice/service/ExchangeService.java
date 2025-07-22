@@ -4,10 +4,16 @@ import lombok.extern.slf4j.Slf4j;
 import net.protsenko.spotfetchprice.dto.ExchangeTickersDTO;
 import net.protsenko.spotfetchprice.dto.TickerDTO;
 import org.knowm.xchange.Exchange;
+import org.knowm.xchange.bitfinex.BitfinexExchange;
+import org.knowm.xchange.bitfinex.service.BitfinexMarketDataServiceRaw;
+import org.knowm.xchange.bitfinex.v2.dto.marketdata.BitfinexTicker;
 import org.knowm.xchange.currency.CurrencyPair;
 import org.knowm.xchange.dto.marketdata.Ticker;
 import org.knowm.xchange.exceptions.ExchangeException;
 import org.knowm.xchange.instrument.Instrument;
+import org.knowm.xchange.kucoin.KucoinMarketDataServiceRaw;
+import org.knowm.xchange.kucoin.dto.response.AllTickersResponse;
+import org.knowm.xchange.kucoin.dto.response.AllTickersTickerResponse;
 import org.knowm.xchange.service.marketdata.MarketDataService;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -21,6 +27,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
+
+import static net.protsenko.spotfetchprice.dto.TickerDTO.parseKucoinSymbol;
 
 @Slf4j
 @Service
@@ -66,26 +74,66 @@ public class ExchangeService {
             Exchange exchange = getOrCreateExchange(exchangeType);
             MarketDataService marketDataService = exchange.getMarketDataService();
 
-            List<Instrument> pairsToQuery = filterCurrencyPairs(exchange, instruments);
+            List<TickerDTO> tickerDTOs;
 
-            List<TickerDTO> tickerDTOs = pairsToQuery.parallelStream()
-                    .map(pair -> {
-                        try {
-                            Ticker ticker = marketDataService.getTicker(pair);
-                            return TickerDTO.fromTicker(ticker);
-                        } catch (ExchangeException ex) {
-                            log.error("ExchangeException for pair {} on {}: {}", pair, exchangeType, ex.getMessage());
-                            return null;
-                        } catch (IOException ioex) {
-                            log.error("IOException for pair {} on {}: {}", pair, exchangeType, ioex.getMessage());
-                            return null;
-                        } catch (Exception ex) {
-                            log.error("Unexpected error for pair {} on {}: {}", pair, exchangeType, ex.toString());
-                            return null;
-                        }
-                    })
-                    .filter(Objects::nonNull)
-                    .toList();
+            if (exchangeType == ExchangeType.KUCOIN) {
+                KucoinMarketDataServiceRaw rawService = (KucoinMarketDataServiceRaw) marketDataService;
+                AllTickersResponse allTickersResponse = rawService.getKucoinTickers();
+
+                AllTickersTickerResponse[] tickersArray = allTickersResponse.getTicker();
+
+                tickerDTOs = Arrays.stream(tickersArray)
+                        .filter(ticker -> instruments == null || instruments.isEmpty() ||
+                                instruments.contains(parseKucoinSymbol(ticker.getSymbol())))
+                        .map(TickerDTO::fromKucoinTicker)
+                        .toList();
+            } else if (exchangeType == ExchangeType.BITFINEX) {
+                BitfinexExchange bitfinexExchange = (BitfinexExchange) exchange;
+                @SuppressWarnings("UnstableApiUsage")
+                BitfinexMarketDataServiceRaw rawService = new BitfinexMarketDataServiceRaw(
+                        (BitfinexExchange) exchange, bitfinexExchange.getResilienceRegistries()
+                );
+
+                List<CurrencyPair> pairsToQuery = filterCurrencyPairs(exchange, instruments).stream()
+                        .filter(instr -> instr instanceof CurrencyPair)
+                        .map(instr -> (CurrencyPair) instr)
+                        .toList();
+
+                try {
+                    BitfinexTicker[] bitfinexTickers = rawService.getBitfinexTickers(pairsToQuery);
+
+                    List<TickerDTO> bitfinexTickerDTOs = Arrays.stream(bitfinexTickers)
+                            .filter(ticker -> !ticker.getSymbol().startsWith("f"))
+                            .map(TickerDTO::fromBitfinexV2Ticker)
+                            .filter(Objects::nonNull)
+                            .toList();
+
+                    tickerDTOs = bitfinexTickerDTOs;
+                } catch (IOException e) {
+                    log.error("Error fetching tickers from Bitfinex: {}", e.getMessage(), e);
+                    tickerDTOs = Collections.emptyList();
+                }
+            } else {
+                List<Instrument> pairsToQuery = filterCurrencyPairs(exchange, instruments);
+                tickerDTOs = pairsToQuery.parallelStream()
+                        .map(pair -> {
+                            try {
+                                Ticker ticker = marketDataService.getTicker(pair);
+                                return TickerDTO.fromTicker(ticker);
+                            } catch (ExchangeException ex) {
+                                log.error("ExchangeException for pair {} on {}: {}", pair, exchangeType, ex.getMessage());
+                                return null;
+                            } catch (IOException ioex) {
+                                log.error("IOException for pair {} on {}: {}", pair, exchangeType, ioex.getMessage());
+                                return null;
+                            } catch (Exception ex) {
+                                log.error("Unexpected error for pair {} on {}: {}", pair, exchangeType, ex.toString());
+                                return null;
+                            }
+                        })
+                        .filter(Objects::nonNull)
+                        .toList();
+            }
 
             ExchangeTickersDTO dto = new ExchangeTickersDTO(exchangeType.name(), tickerDTOs);
 
@@ -136,7 +184,12 @@ public class ExchangeService {
         Exchange exchange = exchangeCache.computeIfAbsent(exchangeType, et -> {
             try {
                 Exchange ex = et.createExchange();
-                ex.remoteInit();
+                try {
+                    ex.remoteInit();
+                } catch (NullPointerException npe) {
+                    log.error("NullPointerException during remoteInit for {}: {}", et, npe.getMessage());
+                    return null;
+                }
                 return ex;
             } catch (IOException e) {
                 log.error("Error initializing exchange {}: {}", et, e.getMessage());
@@ -177,8 +230,7 @@ public class ExchangeService {
 
     public void refreshCache() {
         List<ExchangeType> allExchanges = List.of(ExchangeType.values());
-        List<CurrencyPair> allPairs = null;
-        getAllMarketDataForAllExchanges(allExchanges, allPairs);
+        getAllMarketDataForAllExchanges(allExchanges, null);
     }
 
 }

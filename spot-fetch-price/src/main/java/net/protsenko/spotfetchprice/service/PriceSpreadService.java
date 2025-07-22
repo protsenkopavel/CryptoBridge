@@ -117,7 +117,8 @@ public class PriceSpreadService {
     }
 
     private CurrencyPair parseCurrencyPair(String pairStr) {
-        String[] parts = pairStr.split("_");
+        String normalized = pairStr.replace('/', '_');
+        String[] parts = normalized.split("_");
         if (parts.length != 2) {
             throw new IllegalArgumentException("Invalid currency pair format: " + pairStr);
         }

@@ -17,13 +17,13 @@ public enum ExchangeType {
     BYBIT(BybitExchange.class),
     BINANCE(BinanceExchange.class),
 //    MEXC(MEXCExchange.class),
-//    GATEIO(GateioExchange.class),
+    GATEIO(GateioExchange.class),
     KUCOIN(KucoinExchange.class),
     BITGET(BitgetExchange.class),
-    COINEX(CoinexExchange.class);
+    COINEX(CoinexExchange.class),
 //    HUOBI(HuobiExchange.class),
 //    DERIBIT(DeribitExchange.class),
-//    BITFINEX(BitfinexExchange.class);
+    BITFINEX(BitfinexExchange.class);
 
     private final Class<? extends Exchange> exchangeClass;
 

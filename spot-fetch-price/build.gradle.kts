@@ -31,7 +31,7 @@ dependencies {
     implementation("org.knowm.xchange:xchange-bybit:5.2.2")
     implementation("org.knowm.xchange:xchange-binance:5.2.2")
     implementation("org.knowm.xchange:xchange-mexc:5.2.2")
-    implementation("org.knowm.xchange:xchange-gateio:5.2.2")
+    implementation("org.knowm.xchange:xchange-gateio-v4:5.2.2")
     implementation("org.knowm.xchange:xchange-kucoin:5.2.2")
     implementation("org.knowm.xchange:xchange-bitget:5.2.2")
     implementation("org.knowm.xchange:xchange-coinex:5.2.2")

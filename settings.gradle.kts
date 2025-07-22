@@ -1,2 +1,2 @@
 rootProject.name = "CryptoBridge"
-include("spot-fetch-price", "telegram-notifier")
+include("spot-fetch-price", "telegram-notifier", "web-ui")
