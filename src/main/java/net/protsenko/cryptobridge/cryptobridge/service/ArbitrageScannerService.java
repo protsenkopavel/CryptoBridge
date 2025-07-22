@@ -25,7 +25,7 @@ public class ArbitrageScannerService {
                 : exchangeService.getAvailableExchanges();
 
         for (var pair : pairs) {
-            priceSpreadService.findMaxArbitrageSpreadForPair(pair, exchanges, config.getMinVolume())
+            priceSpreadService.findMaxArbitrageSpreadForPair(pair, exchanges, config.getMinVolume(), config.getMinProfitPercent())
                     .ifPresent(spread -> {
                         log.info("Best arbitrage for pair {}: Buy on {} at {}, sell on {} at {}, spread = ({}%)",
                                 spread.instrument(),

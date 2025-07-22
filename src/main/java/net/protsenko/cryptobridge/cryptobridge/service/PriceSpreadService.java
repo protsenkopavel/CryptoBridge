@@ -20,7 +20,8 @@ public class PriceSpreadService {
     public Optional<PriceSpreadResult> findMaxArbitrageSpreadForPair(
             CurrencyPair pair,
             List<ExchangeType> exchanges,
-            double minVolume
+            double minVolume,
+            double minProfitPercent
     ) {
         List<ExchangeTickersDTO> tickersByExchange = exchangeService.getAllMarketDataForAllExchanges(
                 exchanges,
@@ -46,10 +47,14 @@ public class PriceSpreadService {
             return Optional.empty();
         }
 
-        return findMaxSpread(pair, tickerDataMap);
+        return findMaxSpread(pair, tickerDataMap, minProfitPercent);
     }
 
-    private Optional<PriceSpreadResult> findMaxSpread(CurrencyPair pair, Map<String, TickerData> tickerDataMap) {
+    private Optional<PriceSpreadResult> findMaxSpread(
+            CurrencyPair pair,
+            Map<String, TickerData> tickerDataMap,
+            double minProfitPercent
+    ) {
         var entries = new ArrayList<>(tickerDataMap.entrySet());
 
         return entries.stream()
@@ -61,6 +66,10 @@ public class PriceSpreadService {
                         ))
                 )
                 .filter(c -> c.spread() > 0)
+                .filter(c -> {
+                    double profitPercent = (c.priceB - c.priceA) / c.priceA * 100.0;
+                    return profitPercent >= minProfitPercent;
+                })
                 .max(Comparator.comparingDouble(PriceSpreadCandidate::spread))
                 .map(c -> new PriceSpreadResult(
                         pair,

@@ -16,4 +16,6 @@ public class ArbitrageScannerConfig {
 
     private double minVolume = 0.0;
 
+    private double minProfitPercent = 0.0;
+
 }

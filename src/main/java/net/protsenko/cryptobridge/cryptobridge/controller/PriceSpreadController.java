@@ -23,7 +23,8 @@ public class PriceSpreadController {
         return priceSpreadService.findMaxArbitrageSpreadForPair(
                         CurrencyPair.BTC_USDT,
                         List.of(ExchangeType.BYBIT, ExchangeType.BITGET),
-                        0.0
+                        0.0,
+                        1.0
 
                 )
                 .orElse(null);
