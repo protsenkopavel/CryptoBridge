@@ -1,4 +1,4 @@
-package net.protsenko.cryptobridge.cryptobridge.dto;
+package net.protsenko.spotfetchprice.dto;
 
 import java.util.List;
 

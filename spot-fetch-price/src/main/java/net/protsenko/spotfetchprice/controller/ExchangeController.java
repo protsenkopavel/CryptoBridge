@@ -1,9 +1,9 @@
-package net.protsenko.cryptobridge.cryptobridge.controller;
+package net.protsenko.spotfetchprice.controller;
 
 import lombok.RequiredArgsConstructor;
-import net.protsenko.cryptobridge.cryptobridge.dto.ExchangeTickersDTO;
-import net.protsenko.cryptobridge.cryptobridge.service.ExchangeService;
-import net.protsenko.cryptobridge.cryptobridge.service.ExchangeType;
+import net.protsenko.spotfetchprice.dto.ExchangeTickersDTO;
+import net.protsenko.spotfetchprice.service.ExchangeService;
+import net.protsenko.spotfetchprice.service.ExchangeType;
 import org.knowm.xchange.currency.CurrencyPair;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

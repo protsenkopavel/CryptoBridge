@@ -1,4 +1,4 @@
-package net.protsenko.cryptobridge.cryptobridge.service;
+package net.protsenko.spotfetchprice.service;
 
 import lombok.Data;
 import org.knowm.xchange.currency.CurrencyPair;

@@ -1,4 +1,4 @@
-package net.protsenko.cryptobridge.cryptobridge.service;
+package net.protsenko.spotfetchprice.service;
 
 import org.knowm.xchange.Exchange;
 import org.knowm.xchange.ExchangeFactory;

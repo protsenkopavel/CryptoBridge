@@ -1,4 +1,4 @@
-package net.protsenko.cryptobridge.cryptobridge.service;
+package net.protsenko.spotfetchprice.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

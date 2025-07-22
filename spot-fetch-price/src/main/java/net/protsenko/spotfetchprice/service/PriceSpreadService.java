@@ -1,10 +1,10 @@
-package net.protsenko.cryptobridge.cryptobridge.service;
+package net.protsenko.spotfetchprice.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import net.protsenko.cryptobridge.cryptobridge.dto.ExchangeTickersDTO;
-import net.protsenko.cryptobridge.cryptobridge.dto.PriceSpreadResult;
-import net.protsenko.cryptobridge.cryptobridge.dto.TickerData;
+import net.protsenko.spotfetchprice.dto.ExchangeTickersDTO;
+import net.protsenko.spotfetchprice.dto.PriceSpreadResult;
+import net.protsenko.spotfetchprice.dto.TickerData;
 import org.knowm.xchange.currency.CurrencyPair;
 import org.springframework.stereotype.Service;
 
@@ -15,7 +15,7 @@ import java.util.*;
 @RequiredArgsConstructor
 public class PriceSpreadService {
 
-    private final ExchangeService exchangeService;
+    private final net.protsenko.spotfetchprice.service.ExchangeService exchangeService;
 
     public Optional<PriceSpreadResult> findMaxArbitrageSpreadForPair(
             CurrencyPair pair,

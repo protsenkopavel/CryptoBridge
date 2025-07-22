@@ -1,8 +1,8 @@
-package net.protsenko.cryptobridge.cryptobridge.service;
+package net.protsenko.spotfetchprice.service;
 
 import lombok.extern.slf4j.Slf4j;
-import net.protsenko.cryptobridge.cryptobridge.dto.ExchangeTickersDTO;
-import net.protsenko.cryptobridge.cryptobridge.dto.TickerDTO;
+import net.protsenko.spotfetchprice.dto.ExchangeTickersDTO;
+import net.protsenko.spotfetchprice.dto.TickerDTO;
 import org.knowm.xchange.Exchange;
 import org.knowm.xchange.currency.CurrencyPair;
 import org.knowm.xchange.dto.marketdata.Ticker;
