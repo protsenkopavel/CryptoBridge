@@ -7,22 +7,18 @@ import org.knowm.xchange.bitfinex.BitfinexExchange;
 import org.knowm.xchange.bitget.BitgetExchange;
 import org.knowm.xchange.bybit.BybitExchange;
 import org.knowm.xchange.coinex.CoinexExchange;
-import org.knowm.xchange.deribit.v2.DeribitExchange;
 import org.knowm.xchange.gateio.GateioExchange;
-import org.knowm.xchange.huobi.HuobiExchange;
 import org.knowm.xchange.kucoin.KucoinExchange;
-import org.knowm.xchange.mexc.MEXCExchange;
 
 public enum ExchangeType {
-    //    BYBIT(BybitExchange.class),
-//    BINANCE(BinanceExchange.class),
+    BYBIT(BybitExchange.class),
+    BINANCE(BinanceExchange.class),
     MEXC(null),
-    //    GATEIO(GateioExchange.class),
+    GATEIO(GateioExchange.class),
     KUCOIN(KucoinExchange.class),
-    //    BITGET(BitgetExchange.class),
-//    COINEX(CoinexExchange.class),
-//    HUOBI(HuobiExchange.class),
-//    DERIBIT(DeribitExchange.class),
+    BITGET(BitgetExchange.class),
+    COINEX(CoinexExchange.class),
+    //    HUOBI(HuobiExchange.class),
     BITFINEX(BitfinexExchange.class);
 
     private final Class<? extends Exchange> exchangeClass;
