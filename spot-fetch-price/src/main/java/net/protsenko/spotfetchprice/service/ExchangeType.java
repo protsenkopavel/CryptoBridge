@@ -14,13 +14,13 @@ import org.knowm.xchange.kucoin.KucoinExchange;
 import org.knowm.xchange.mexc.MEXCExchange;
 
 public enum ExchangeType {
-    BYBIT(BybitExchange.class),
-    BINANCE(BinanceExchange.class),
-//    MEXC(MEXCExchange.class),
-    GATEIO(GateioExchange.class),
+    //    BYBIT(BybitExchange.class),
+//    BINANCE(BinanceExchange.class),
+    MEXC(null),
+    //    GATEIO(GateioExchange.class),
     KUCOIN(KucoinExchange.class),
-    BITGET(BitgetExchange.class),
-    COINEX(CoinexExchange.class),
+    //    BITGET(BitgetExchange.class),
+//    COINEX(CoinexExchange.class),
 //    HUOBI(HuobiExchange.class),
 //    DERIBIT(DeribitExchange.class),
     BITFINEX(BitfinexExchange.class);
@@ -34,4 +34,5 @@ public enum ExchangeType {
     public Exchange createExchange() {
         return ExchangeFactory.INSTANCE.createExchange(exchangeClass);
     }
+
 }

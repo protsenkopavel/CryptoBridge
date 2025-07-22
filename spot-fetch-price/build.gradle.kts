@@ -39,6 +39,7 @@ dependencies {
     implementation("org.knowm.xchange:xchange-deribit:5.2.2")
     implementation("org.knowm.xchange:xchange-bitfinex:5.2.2")
 
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.19.2")
     implementation("org.mapstruct:mapstruct:1.6.3")
     annotationProcessor("org.mapstruct:mapstruct-processor:1.6.3")
     compileOnly("org.projectlombok:lombok")

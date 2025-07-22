@@ -24,7 +24,7 @@ public class ScannerController {
 
     @GetMapping("/available-pairs")
     public List<CurrencyPair> getAvailablePairs() {
-        return exchangeService.getAvailableCurrencyPairs(List.of(ExchangeType.BYBIT));
+        return exchangeService.getAvailableCurrencyPairs(null);
     }
 
 }

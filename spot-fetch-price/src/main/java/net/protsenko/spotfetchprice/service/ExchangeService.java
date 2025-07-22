@@ -1,5 +1,7 @@
 package net.protsenko.spotfetchprice.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import net.protsenko.spotfetchprice.dto.ExchangeTickersDTO;
 import net.protsenko.spotfetchprice.dto.TickerDTO;
@@ -14,12 +16,17 @@ import org.knowm.xchange.instrument.Instrument;
 import org.knowm.xchange.kucoin.KucoinMarketDataServiceRaw;
 import org.knowm.xchange.kucoin.dto.response.AllTickersResponse;
 import org.knowm.xchange.kucoin.dto.response.AllTickersTickerResponse;
+import org.knowm.xchange.mexc.MEXCExchange;
 import org.knowm.xchange.service.marketdata.MarketDataService;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -71,6 +78,14 @@ public class ExchangeService {
                 return cachedData;
             }
 
+            if (exchangeType == ExchangeType.MEXC) {
+                List<TickerDTO> tickerDTOs = fetchMexcTickersViaHttp(instruments);
+                ExchangeTickersDTO dto = new ExchangeTickersDTO(exchangeType.name(), tickerDTOs);
+                valueOps.set(cacheKey, dto, Duration.ofSeconds(cacheTtlSeconds));
+                log.debug("Cache set for key {}", cacheKey);
+                return dto;
+            }
+
             Exchange exchange = getOrCreateExchange(exchangeType);
             MarketDataService marketDataService = exchange.getMarketDataService();
 
@@ -101,14 +116,11 @@ public class ExchangeService {
 
                 try {
                     BitfinexTicker[] bitfinexTickers = rawService.getBitfinexTickers(pairsToQuery);
-
-                    List<TickerDTO> bitfinexTickerDTOs = Arrays.stream(bitfinexTickers)
+                    tickerDTOs = Arrays.stream(bitfinexTickers)
                             .filter(ticker -> !ticker.getSymbol().startsWith("f"))
                             .map(TickerDTO::fromBitfinexV2Ticker)
                             .filter(Objects::nonNull)
                             .toList();
-
-                    tickerDTOs = bitfinexTickerDTOs;
                 } catch (IOException e) {
                     log.error("Error fetching tickers from Bitfinex: {}", e.getMessage(), e);
                     tickerDTOs = Collections.emptyList();
@@ -157,6 +169,11 @@ public class ExchangeService {
 
         for (ExchangeType exchangeType : exchangeTypes) {
             try {
+                if (exchangeType == ExchangeType.MEXC) {
+                    pairsSet.addAll(fetchMexcPairsViaHttp());
+                    continue;
+                }
+
                 Exchange exchange = getOrCreateExchange(exchangeType);
                 pairsSet.addAll(
                         exchange.getExchangeInstruments().stream()
@@ -181,6 +198,10 @@ public class ExchangeService {
     }
 
     private Exchange getOrCreateExchange(ExchangeType exchangeType) throws IOException {
+        if (exchangeType == ExchangeType.MEXC) {
+            throw new UnsupportedOperationException();
+        }
+
         Exchange exchange = exchangeCache.computeIfAbsent(exchangeType, et -> {
             try {
                 Exchange ex = et.createExchange();
@@ -206,13 +227,24 @@ public class ExchangeService {
     }
 
     private List<Instrument> filterCurrencyPairs(Exchange exchange, List<CurrencyPair> instrumentsFilter) {
-        return exchange.getExchangeInstruments().stream()
+        if (exchange instanceof MEXCExchange) {
+            List<CurrencyPair> allPairs = fetchMexcPairsViaHttp();
+
+            if (instrumentsFilter == null || instrumentsFilter.isEmpty()) {
+                return new ArrayList<>(allPairs);
+            } else {
+                return allPairs.stream()
+                        .filter(instrumentsFilter::contains)
+                        .collect(Collectors.toList());
+            }
+        }
+
+        Collection<Instrument> instrs = exchange.getExchangeInstruments();
+        if (instrs == null) return Collections.emptyList();
+        return instrs.stream()
                 .filter(instr -> instr instanceof CurrencyPair)
-                .filter(pair ->
-                        instrumentsFilter == null
-                                || instrumentsFilter.isEmpty()
-                                || instrumentsFilter.contains(pair))
-                .toList();
+                .filter(pair -> instrumentsFilter == null || instrumentsFilter.isEmpty() || instrumentsFilter.contains(pair))
+                .collect(Collectors.toList());
     }
 
     private String generateCacheKey(ExchangeType exchangeType, List<CurrencyPair> instruments) {
@@ -231,6 +263,102 @@ public class ExchangeService {
     public void refreshCache() {
         List<ExchangeType> allExchanges = List.of(ExchangeType.values());
         getAllMarketDataForAllExchanges(allExchanges, null);
+    }
+
+    public List<CurrencyPair> fetchMexcPairsViaHttp() {
+        try (HttpClient client = HttpClient.newHttpClient()) {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.mexc.com/api/v3/exchangeInfo"))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode root = mapper.readTree(response.body());
+            JsonNode symbols = root.get("symbols");
+
+            if (symbols == null || !symbols.isArray()) {
+                throw new RuntimeException();
+            }
+
+            List<CurrencyPair> result = new ArrayList<>();
+            for (JsonNode symbolNode : symbols) {
+                JsonNode base = symbolNode.get("baseAsset");
+                JsonNode quote = symbolNode.get("quoteAsset");
+                JsonNode permissions = symbolNode.get("permissions");
+
+                boolean isSpot = false;
+                if (permissions != null && permissions.isArray()) {
+                    for (JsonNode perm : permissions) {
+                        if ("SPOT".equalsIgnoreCase(perm.asText())) {
+                            isSpot = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (base != null && quote != null && isSpot) {
+                    result.add(new CurrencyPair(base.asText(), quote.asText()));
+                }
+            }
+            return result;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed load MEXC", e);
+        }
+    }
+
+    public List<TickerDTO> fetchMexcTickersViaHttp(List<CurrencyPair> pairsFilter) {
+        List<TickerDTO> result = new ArrayList<>();
+        String[] QUOTES = {"USDT", "USDC"};
+
+        try (HttpClient client = HttpClient.newHttpClient()){
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.mexc.com/api/v3/ticker/bookTicker"))
+                    .build();
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode tickers = mapper.readTree(response.body());
+
+            for (JsonNode tickerNode : tickers) {
+                String symbol = tickerNode.get("symbol").asText();
+                boolean supported = false;
+                for (String quote : QUOTES) {
+                    if (symbol.endsWith(quote)) {
+                        supported = true;
+                        break;
+                    }
+                }
+                if (!supported) {
+                    continue;
+                }
+
+                try {
+                    CurrencyPair pair = parseMexcSymbol(symbol);
+                    if (pairsFilter == null || pairsFilter.isEmpty() || pairsFilter.contains(pair)) {
+                        double bid = tickerNode.has("bidPrice") ? tickerNode.get("bidPrice").asDouble() : 0;
+                        double ask = tickerNode.has("askPrice") ? tickerNode.get("askPrice").asDouble() : 0;
+                        result.add(new TickerDTO(pair.getBase().getCurrencyCode(), pair.getCounter().getCurrencyCode(), 0, bid, ask, 0, 0));
+                    }
+                } catch (IllegalArgumentException ex) {
+                    log.warn("Parsing exception MEXC: {}", symbol, ex);
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Loading fail MEXC", e);
+        }
+        return result;
+    }
+
+    private CurrencyPair parseMexcSymbol(String symbol) {
+        String[] QUOTES = {"USDT", "USDC"};
+
+        for (String quote : QUOTES) {
+            if (symbol.endsWith(quote)) {
+                String base = symbol.substring(0, symbol.length() - quote.length());
+                return new CurrencyPair(base, quote);
+            }
+        }
+        throw new IllegalArgumentException("Unsupported type MEXC: " + symbol);
     }
 
 }
