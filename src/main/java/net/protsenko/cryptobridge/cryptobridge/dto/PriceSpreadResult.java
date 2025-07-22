@@ -4,10 +4,16 @@ import org.knowm.xchange.instrument.Instrument;
 
 public record PriceSpreadResult(
         Instrument instrument,
-        String exchangeA,
-        double priceA,
-        String exchangeB,
-        double priceB,
+        String buyExchange,
+        double buyPrice,
+        String sellExchange,
+        double sellPrice,
         double spread
 ) {
+    public double spreadPercent() {
+        if (buyPrice == 0) {
+            return 0.0;
+        }
+        return (sellPrice - buyPrice) / buyPrice * 100.0;
+    }
 }
