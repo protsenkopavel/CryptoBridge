@@ -6,8 +6,10 @@ public record PriceSpreadResult(
         Instrument instrument,
         String buyExchange,
         double buyPrice,
+        Double buyVolume,
         String sellExchange,
         double sellPrice,
+        Double sellVolume,
         double spread,
         double spreadPercentage
 ) {

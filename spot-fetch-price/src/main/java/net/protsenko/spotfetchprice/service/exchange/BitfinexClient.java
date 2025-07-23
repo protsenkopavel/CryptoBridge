@@ -2,6 +2,7 @@ package net.protsenko.spotfetchprice.service.exchange;
 
 import lombok.extern.slf4j.Slf4j;
 import net.protsenko.spotfetchprice.dto.TickerDTO;
+import net.protsenko.spotfetchprice.mapper.TickerMapper;
 import net.protsenko.spotfetchprice.service.ExchangeType;
 import org.knowm.xchange.Exchange;
 import org.knowm.xchange.bitfinex.BitfinexExchange;
@@ -38,7 +39,7 @@ public class BitfinexClient extends BaseXChangeClient {
             BitfinexTicker[] bitfinexTickers = rawService.getBitfinexTickers(pairsToQuery);
             return Arrays.stream(bitfinexTickers)
                     .filter(ticker -> !ticker.getSymbol().startsWith("f"))
-                    .map(TickerDTO::fromBitfinexV2Ticker)
+                    .map(TickerMapper::fromBitfinexV2Ticker)
                     .filter(Objects::nonNull)
                     .toList();
         } catch (IOException e) {

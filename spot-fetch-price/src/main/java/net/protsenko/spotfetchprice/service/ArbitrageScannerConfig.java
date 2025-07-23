@@ -18,4 +18,6 @@ public class ArbitrageScannerConfig {
 
     private double minProfitPercent = 0.0;
 
+    private double maxProfitPercent = 100.0;
+
 }

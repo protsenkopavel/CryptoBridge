@@ -2,6 +2,7 @@ package net.protsenko.spotfetchprice.service.exchange;
 
 import lombok.extern.slf4j.Slf4j;
 import net.protsenko.spotfetchprice.dto.TickerDTO;
+import net.protsenko.spotfetchprice.mapper.TickerMapper;
 import org.knowm.xchange.Exchange;
 import org.knowm.xchange.currency.CurrencyPair;
 import org.knowm.xchange.dto.marketdata.Ticker;
@@ -24,7 +25,7 @@ public abstract class BaseXChangeClient implements ExchangeClient {
         List<Ticker> tickers = exchange.getMarketDataService().getTickers(null);
         return tickers.stream()
                 .filter(ticker -> instruments == null || instruments.isEmpty() || instruments.contains(ticker.getInstrument()))
-                .map(TickerDTO::fromTicker)
+                .map(TickerMapper::fromTicker)
                 .collect(Collectors.toList());
     }
 

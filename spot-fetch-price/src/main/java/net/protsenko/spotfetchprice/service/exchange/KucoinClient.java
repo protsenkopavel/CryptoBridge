@@ -1,6 +1,7 @@
 package net.protsenko.spotfetchprice.service.exchange;
 
 import net.protsenko.spotfetchprice.dto.TickerDTO;
+import net.protsenko.spotfetchprice.mapper.TickerMapper;
 import net.protsenko.spotfetchprice.service.ExchangeType;
 import org.knowm.xchange.Exchange;
 import org.knowm.xchange.currency.CurrencyPair;
@@ -12,7 +13,6 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
-import static net.protsenko.spotfetchprice.dto.TickerDTO.parseKucoinSymbol;
 
 public class KucoinClient extends BaseXChangeClient {
 
@@ -29,8 +29,8 @@ public class KucoinClient extends BaseXChangeClient {
 
         return Arrays.stream(tickersArray)
                 .filter(ticker -> instruments == null || instruments.isEmpty() ||
-                        instruments.contains(parseKucoinSymbol(ticker.getSymbol())))
-                .map(TickerDTO::fromKucoinTicker)
+                        instruments.contains(TickerMapper.parseKucoinSymbol(ticker.getSymbol())))
+                .map(TickerMapper::fromKucoinTicker)
                 .toList();
     }
 

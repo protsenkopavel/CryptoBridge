@@ -42,7 +42,7 @@ public class PriceSpreadService {
         }
 
         return tickersByPair.entrySet().parallelStream()
-                .map(entry -> findMaxSpread(entry.getKey(), entry.getValue(), spreadsRq.minProfitPercent()))
+                .map(entry -> findMaxSpread(entry.getKey(), entry.getValue(), spreadsRq.minProfitPercent(), spreadsRq.maxProfitPercent()))
                 .filter(Optional::isPresent)
                 .map(Optional::get)
                 .collect(Collectors.toList());
@@ -52,7 +52,8 @@ public class PriceSpreadService {
             CurrencyPair pair,
             List<ExchangeType> exchanges,
             double minVolume,
-            double minProfitPercent
+            double minProfitPercent,
+            double maxProfitPercent
     ) {
         List<ExchangeTickersDTO> tickersByExchange = exchangeService.getAllMarketDataForAllExchanges(
                 exchanges,
@@ -78,13 +79,14 @@ public class PriceSpreadService {
             return Optional.empty();
         }
 
-        return findMaxSpread(pair, tickerDataMap, minProfitPercent);
+        return findMaxSpread(pair, tickerDataMap, minProfitPercent, maxProfitPercent);
     }
 
     private Optional<PriceSpreadResult> findMaxSpread(
             CurrencyPair pair,
             Map<String, TickerData> tickerDataMap,
-            double minProfitPercent
+            double minProfitPercent,
+            double maxProfitPercent
     ) {
         var entries = new ArrayList<>(tickerDataMap.entrySet());
 
@@ -92,20 +94,20 @@ public class PriceSpreadService {
                 .flatMap(eSell -> entries.stream()
                         .filter(eBuy -> !eBuy.getKey().equals(eSell.getKey()))
                         .map(eBuy -> new PriceSpreadCandidate(
-                                eBuy.getKey(), eBuy.getValue().ask(),
-                                eSell.getKey(), eSell.getValue().bid()
+                                eBuy.getKey(), eBuy.getValue().ask(), eBuy.getValue().volume(),
+                                eSell.getKey(), eSell.getValue().bid(), eSell.getValue().volume()
                         ))
                 )
                 .filter(c -> c.spread() > 0)
                 .filter(c -> {
                     double profitPercent = (c.sellPrice() - c.buyPrice()) / c.buyPrice() * 100.0;
-                    return profitPercent >= minProfitPercent;
+                    return profitPercent >= minProfitPercent && profitPercent <= maxProfitPercent;
                 })
                 .max(Comparator.comparingDouble(PriceSpreadCandidate::spread))
                 .map(c -> new PriceSpreadResult(
                         pair,
-                        c.buyExchange(), c.buyPrice(),
-                        c.sellExchange(), c.sellPrice(),
+                        c.buyExchange(), c.buyPrice(), c.buyVolume(),
+                        c.sellExchange(), c.sellPrice(), c.sellVolume(),
                         c.spread(),
                         (c.sellPrice() - c.buyPrice()) / c.buyPrice() * 100.0
                 ));

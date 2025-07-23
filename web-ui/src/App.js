@@ -2,6 +2,20 @@ import React, { useEffect, useState } from 'react';
 import { fetchAvailableExchanges, fetchAvailablePairs, fetchBestSpreads } from './api';
 
 function App() {
+    const formatVolume = (num) => {
+        if (num === null || num === undefined) return '0.00';
+        if (num >= 1_000_000_000) {
+            return (num / 1_000_000_000).toFixed(2) + 'B';
+        }
+        if (num >= 1_000_000) {
+            return (num / 1_000_000).toFixed(2) + 'M';
+        }
+        if (num >= 1_000) {
+            return (num / 1_000).toFixed(2) + 'K';
+        }
+        return num.toFixed(2);
+    };
+
     const [exchanges, setExchanges] = useState([]);
     const [pairs, setPairs] = useState([]);
     const [filteredPairs, setFilteredPairs] = useState([]);
@@ -11,6 +25,7 @@ function App() {
 
     const [minProfit, setMinProfit] = useState(0);
     const [minVolume, setMinVolume] = useState(0);
+    const [maxProfit, setMaxProfit] = useState(100);
 
     const [filterText, setFilterText] = useState('');
 
@@ -53,6 +68,7 @@ function App() {
             exchanges: selectedExchanges.length ? selectedExchanges : null,
             pairs: selectedPairs.length ? selectedPairs : null,
             minProfitPercent: minProfit,
+            maxProfitPercent: maxProfit,
             minVolume: minVolume,
         })
             .then(data => setSpreads(data))
@@ -124,6 +140,18 @@ function App() {
                 </label>
             </div>
 
+            <div style={{ marginTop: 10 }}>
+                <label>
+                    Максимальный профит (%):
+                    <input
+                        type="number"
+                        value={maxProfit}
+                        onChange={e => setMaxProfit(Number(e.target.value))}
+                        style={{ marginLeft: 10, width: 60 }}
+                    />
+                </label>
+            </div>
+
             <button
                 onClick={handleFetchSpreads}
                 disabled={loading}
@@ -137,7 +165,7 @@ function App() {
                 {spreads.length === 0 && !loading && <li>Нет результатов</li>}
                 {spreads.map(spread => (
                     <li key={`${spread.instrument}-${spread.buyExchange}-${spread.sellExchange}`}>
-                        {spread.instrument} — Купить на {spread.buyExchange} за {spread.buyPrice.toFixed(6)}, продать на {spread.sellExchange} за {spread.sellPrice.toFixed(6)} — спред {spread.spreadPercentage.toFixed(2)}%
+                        {spread.instrument} — Купить на {spread.buyExchange} за ${spread.buyPrice.toFixed(6)} (объем: {formatVolume(spread.buyVolume)}), продать на {spread.sellExchange} за ${spread.sellPrice.toFixed(6)} (объем: {formatVolume(spread.sellVolume)}) — спред {spread.spreadPercentage.toFixed(2)}%
                     </li>
                 ))}
             </ul>
