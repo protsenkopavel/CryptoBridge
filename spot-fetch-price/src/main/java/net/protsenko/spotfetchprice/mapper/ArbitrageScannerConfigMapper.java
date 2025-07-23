@@ -10,23 +10,4 @@ import java.util.stream.Collectors;
 
 @Mapper(componentModel = "spring")
 public interface ArbitrageScannerConfigMapper extends Mappable<ArbitrageScannerConfig, ArbitrageScannerConfigDto> {
-
-    default String map(CurrencyPair pair) {
-        return pair == null ? null : pair.toString();
-    }
-
-    default CurrencyPair map(String pair) {
-        return pair == null ? null : new CurrencyPair(pair);
-    }
-
-    default List<String> mapPairsToString(List<CurrencyPair> pairs) {
-        if (pairs == null) return null;
-        return pairs.stream().map(this::map).collect(Collectors.toList());
-    }
-
-    default List<CurrencyPair> mapStringsToPairs(List<String> pairs) {
-        if (pairs == null) return null;
-        return pairs.stream().map(this::map).collect(Collectors.toList());
-    }
-
 }

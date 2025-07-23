@@ -8,6 +8,24 @@ services:
     networks:
       - crypto-net
 
+  spot-fetch-price:
+    build: ./spot-fetch-price
+    container_name: spot-fetch-price
+    ports:
+      - "8080:8080"
+    depends_on:
+      - redis
+    networks:
+      - crypto-net
+
+  web-ui:
+    build: ./web-ui
+    container_name: web-ui
+    ports:
+      - "80:80"
+    networks:
+      - crypto-net
+
 networks:
   crypto-net:
     driver: bridge
