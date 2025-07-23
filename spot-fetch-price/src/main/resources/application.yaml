@@ -6,7 +6,7 @@ spring:
     name: spot-fetch-price
   data:
     redis:
-      host: localhost
+      host: redis
       port: 6379
       timeout: 2000ms
 
@@ -19,6 +19,6 @@ arbitrage:
     refresh-ms: 300000
 
 logging:
-  config: spot-fetch-price/src/main/resources/logback-spring.xml
+#  config: spot-fetch-price/src/main/resources/logback-spring.xml
   level:
     org.springframework.web: DEBUG

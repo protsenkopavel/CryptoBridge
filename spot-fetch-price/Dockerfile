@@ -8,7 +8,7 @@ WORKDIR application
 COPY --from=build /home/gradle/project/build/libs/*.jar app.jar
 RUN java -Djarmode=layertools -jar app.jar extract
 
-FROM openjdk:17-jdk-slim
+FROM openjdk:24-jdk-slim
 WORKDIR application
 COPY --from=layer-extractor application/dependencies/ ./
 COPY --from=layer-extractor application/snapshot-dependencies/ ./
