@@ -21,10 +21,10 @@ public record TickerDTO(
         return new TickerDTO(
                 ticker.getInstrument().getBase().getCurrencyCode(),
                 ticker.getInstrument().getCounter().getCurrencyCode(),
-                ticker.getLast().doubleValue(),
-                ticker.getBid().doubleValue(),
-                ticker.getAsk().doubleValue(),
-                ticker.getVolume().doubleValue(),
+                safeDouble(ticker.getLast()),
+                safeDouble(ticker.getBid()),
+                safeDouble(ticker.getAsk()),
+                safeDouble(ticker.getVolume()),
                 ticker.getTimestamp() != null ? ticker.getTimestamp().getTime() : 0L
         );
     }
