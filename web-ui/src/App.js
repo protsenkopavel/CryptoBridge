@@ -25,7 +25,7 @@ function App() {
 
     const [minProfit, setMinProfit] = useState(0);
     const [minVolume, setMinVolume] = useState(0);
-    const [maxProfit, setMaxProfit] = useState(100);
+    const [maxProfit, setMaxProfit] = useState(0);
 
     const [filterText, setFilterText] = useState('');
 

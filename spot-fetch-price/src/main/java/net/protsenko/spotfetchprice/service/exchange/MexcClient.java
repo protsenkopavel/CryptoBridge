@@ -32,7 +32,7 @@ public class MexcClient implements ExchangeClient {
         List<TickerDTO> result = new ArrayList<>();
         try {
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://api.mexc.com/api/v3/ticker/bookTicker"))
+                    .uri(URI.create("https://api.mexc.com/api/v3/ticker/24hr"))
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
@@ -49,7 +49,8 @@ public class MexcClient implements ExchangeClient {
                     if (pairsFilter == null || pairsFilter.isEmpty() || pairsFilter.contains(pair)) {
                         double bid = tickerNode.has("bidPrice") ? tickerNode.get("bidPrice").asDouble() : 0;
                         double ask = tickerNode.has("askPrice") ? tickerNode.get("askPrice").asDouble() : 0;
-                        result.add(new TickerDTO(pair.getBase().getCurrencyCode(), pair.getCounter().getCurrencyCode(), 0, bid, ask, 0, 0));
+                        double volume = tickerNode.has("volume") ? tickerNode.get("volume").asDouble() : 0;
+                        result.add(new TickerDTO(pair.getBase().getCurrencyCode(), pair.getCounter().getCurrencyCode(), 0, bid, ask, volume, 0));
                     }
                 } catch (IllegalArgumentException ex) {
                     log.warn("Parsing exception MEXC: {}", symbol, ex);
