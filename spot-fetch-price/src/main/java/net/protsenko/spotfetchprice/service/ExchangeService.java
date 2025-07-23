@@ -153,8 +153,4 @@ public class ExchangeService {
         return exchangeType.name() + ":" + instrumentsKey;
     }
 
-    public void refreshCache() {
-        List<ExchangeType> allExchanges = List.of(ExchangeType.values());
-        getAllMarketDataForAllExchanges(allExchanges, null);
-    }
 }
