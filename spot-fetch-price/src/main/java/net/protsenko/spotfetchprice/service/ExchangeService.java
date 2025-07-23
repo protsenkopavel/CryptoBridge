@@ -2,6 +2,7 @@ package net.protsenko.spotfetchprice.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import net.protsenko.spotfetchprice.dto.ExchangeTickersDTO;
 import net.protsenko.spotfetchprice.dto.TickerDTO;
@@ -11,7 +12,6 @@ import org.knowm.xchange.bitfinex.service.BitfinexMarketDataServiceRaw;
 import org.knowm.xchange.bitfinex.v2.dto.marketdata.BitfinexTicker;
 import org.knowm.xchange.currency.CurrencyPair;
 import org.knowm.xchange.dto.marketdata.Ticker;
-import org.knowm.xchange.exceptions.ExchangeException;
 import org.knowm.xchange.instrument.Instrument;
 import org.knowm.xchange.kucoin.KucoinMarketDataServiceRaw;
 import org.knowm.xchange.kucoin.dto.response.AllTickersResponse;
@@ -45,9 +45,35 @@ public class ExchangeService {
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
     private final ValueOperations<String, ExchangeTickersDTO> valueOps;
     private final Map<ExchangeType, Exchange> exchangeCache = new ConcurrentHashMap<>();
+    private final HttpClient httpClient;
+    private final ObjectMapper objectMapper;
 
     public ExchangeService(RedisTemplate<String, ExchangeTickersDTO> redisTemplate) {
         this.valueOps = redisTemplate.opsForValue();
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(10))
+                .build();
+        this.objectMapper = new ObjectMapper();
+    }
+
+    @PostConstruct
+    public void initializeExchanges() {
+        log.info("Initializing exchanges asynchronously...");
+        List<ExchangeType> exchangeTypes = Arrays.stream(ExchangeType.values())
+                .filter(e -> e != ExchangeType.MEXC)
+                .toList();
+
+        for (ExchangeType exchangeType : exchangeTypes) {
+            executor.submit(() -> {
+                try {
+                    log.info("Initializing exchange: {}", exchangeType);
+                    getOrCreateExchange(exchangeType);
+                    log.info("Successfully initialized exchange: {}", exchangeType);
+                } catch (Exception e) {
+                    log.warn("Failed to pre-initialize exchange {}: {}", exchangeType, e.getMessage());
+                }
+            });
+        }
     }
 
     public List<ExchangeTickersDTO> getAllMarketDataForAllExchanges(
@@ -126,25 +152,16 @@ public class ExchangeService {
                     tickerDTOs = Collections.emptyList();
                 }
             } else {
-                List<Instrument> pairsToQuery = filterCurrencyPairs(exchange, instruments);
-                tickerDTOs = pairsToQuery.parallelStream()
-                        .map(pair -> {
-                            try {
-                                Ticker ticker = marketDataService.getTicker(pair);
-                                return TickerDTO.fromTicker(ticker);
-                            } catch (ExchangeException ex) {
-                                log.error("ExchangeException for pair {} on {}: {}", pair, exchangeType, ex.getMessage());
-                                return null;
-                            } catch (IOException ioex) {
-                                log.error("IOException for pair {} on {}: {}", pair, exchangeType, ioex.getMessage());
-                                return null;
-                            } catch (Exception ex) {
-                                log.error("Unexpected error for pair {} on {}: {}", pair, exchangeType, ex.toString());
-                                return null;
-                            }
-                        })
-                        .filter(Objects::nonNull)
-                        .toList();
+                try {
+                    List<Ticker> tickers = marketDataService.getTickers(null);
+                    tickerDTOs = tickers.stream()
+                            .filter(ticker -> instruments == null || instruments.isEmpty() || instruments.contains(ticker.getInstrument()))
+                            .map(TickerDTO::fromTicker)
+                            .collect(Collectors.toList());
+                } catch (IOException e) {
+                    log.error("Error fetching tickers from {}: {}", exchangeType, e.getMessage(), e);
+                    tickerDTOs = Collections.emptyList();
+                }
             }
 
             ExchangeTickersDTO dto = new ExchangeTickersDTO(exchangeType.name(), tickerDTOs);
@@ -165,30 +182,35 @@ public class ExchangeService {
 
     public List<CurrencyPair> getAvailableCurrencyPairs(List<ExchangeType> exchanges) {
         List<ExchangeType> exchangeTypes = normalizeExchanges(exchanges);
-        Set<CurrencyPair> pairsSet = new HashSet<>();
 
-        for (ExchangeType exchangeType : exchangeTypes) {
-            try {
-                if (exchangeType == ExchangeType.MEXC) {
-                    pairsSet.addAll(fetchMexcPairsViaHttp());
-                    continue;
-                }
+        List<CompletableFuture<Collection<CurrencyPair>>> futures = exchangeTypes.stream()
+                .map(exchangeType -> CompletableFuture.supplyAsync(
+                        () -> fetchPairsForExchange(exchangeType), executor))
+                .toList();
 
-                Exchange exchange = getOrCreateExchange(exchangeType);
-                pairsSet.addAll(
-                        exchange.getExchangeInstruments().stream()
-                                .filter(instr -> instr instanceof CurrencyPair)
-                                .map(instr -> (CurrencyPair) instr)
-                                .toList()
-                );
-            } catch (Exception e) {
-                log.error("Error fetching instruments for exchange {}: {}", exchangeType, e.getMessage(), e);
-            }
-        }
-
-        return pairsSet.stream()
+        return futures.stream()
+                .map(CompletableFuture::join)
+                .flatMap(Collection::stream)
+                .distinct()
                 .sorted(Comparator.comparing(CurrencyPair::toString))
                 .toList();
+    }
+
+    private Collection<CurrencyPair> fetchPairsForExchange(ExchangeType exchangeType) {
+        try {
+            if (exchangeType == ExchangeType.MEXC) {
+                return fetchMexcPairsViaHttp();
+            }
+
+            Exchange exchange = getOrCreateExchange(exchangeType);
+            return exchange.getExchangeInstruments().stream()
+                    .filter(instr -> instr instanceof CurrencyPair)
+                    .map(instr -> (CurrencyPair) instr)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("Error fetching instruments for exchange {}: {}", exchangeType, e.getMessage(), e);
+            return Collections.emptyList();
+        }
     }
 
     private List<ExchangeType> normalizeExchanges(List<ExchangeType> exchanges) {
@@ -266,14 +288,13 @@ public class ExchangeService {
     }
 
     public List<CurrencyPair> fetchMexcPairsViaHttp() {
-        try (HttpClient client = HttpClient.newHttpClient()) {
+        try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create("https://api.mexc.com/api/v3/exchangeInfo"))
                     .build();
 
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode root = mapper.readTree(response.body());
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            JsonNode root = objectMapper.readTree(response.body());
             JsonNode symbols = root.get("symbols");
 
             if (symbols == null || !symbols.isArray()) {
@@ -310,14 +331,13 @@ public class ExchangeService {
         List<TickerDTO> result = new ArrayList<>();
         String[] QUOTES = {"USDT", "USDC"};
 
-        try (HttpClient client = HttpClient.newHttpClient()){
+        try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create("https://api.mexc.com/api/v3/ticker/bookTicker"))
                     .build();
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode tickers = mapper.readTree(response.body());
+            JsonNode tickers = objectMapper.readTree(response.body());
 
             for (JsonNode tickerNode : tickers) {
                 String symbol = tickerNode.get("symbol").asText();
