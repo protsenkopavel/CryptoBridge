@@ -88,29 +88,87 @@ public class PriceSpreadService {
             double minProfitPercent,
             double maxProfitPercent
     ) {
-        var entries = new ArrayList<>(tickerDataMap.entrySet());
+        if (tickerDataMap.size() < 2) {
+            return Optional.empty();
+        }
 
-        return entries.stream()
-                .flatMap(eSell -> entries.stream()
-                        .filter(eBuy -> !eBuy.getKey().equals(eSell.getKey()))
-                        .map(eBuy -> new PriceSpreadCandidate(
-                                eBuy.getKey(), eBuy.getValue().ask(), eBuy.getValue().volume(),
-                                eSell.getKey(), eSell.getValue().bid(), eSell.getValue().volume()
-                        ))
-                )
-                .filter(c -> c.spread() > 0)
-                .filter(c -> {
-                    double profitPercent = (c.sellPrice() - c.buyPrice()) / c.buyPrice() * 100.0;
-                    return profitPercent >= minProfitPercent && profitPercent <= maxProfitPercent;
-                })
-                .max(Comparator.comparingDouble(PriceSpreadCandidate::spread))
-                .map(c -> new PriceSpreadResult(
-                        pair,
-                        c.buyExchange(), c.buyPrice(), c.buyVolume(),
-                        c.sellExchange(), c.sellPrice(), c.sellVolume(),
-                        c.spread(),
-                        (c.sellPrice() - c.buyPrice()) / c.buyPrice() * 100.0
-                ));
+        Map.Entry<String, TickerData> minAskEntry = null;
+        Map.Entry<String, TickerData> secondMinAskEntry = null;
+
+        Map.Entry<String, TickerData> maxBidEntry = null;
+        Map.Entry<String, TickerData> secondMaxBidEntry = null;
+
+        for (Map.Entry<String, TickerData> entry : tickerDataMap.entrySet()) {
+            if (minAskEntry == null || entry.getValue().ask() < minAskEntry.getValue().ask()) {
+                secondMinAskEntry = minAskEntry;
+                minAskEntry = entry;
+            } else if (secondMinAskEntry == null || entry.getValue().ask() < secondMinAskEntry.getValue().ask()) {
+                secondMinAskEntry = entry;
+            }
+
+            if (maxBidEntry == null || entry.getValue().bid() > maxBidEntry.getValue().bid()) {
+                secondMaxBidEntry = maxBidEntry;
+                maxBidEntry = entry;
+            } else if (secondMaxBidEntry == null || entry.getValue().bid() > secondMaxBidEntry.getValue().bid()) {
+                secondMaxBidEntry = entry;
+            }
+        }
+
+        if (minAskEntry == null) {
+            return Optional.empty();
+        }
+
+        PriceSpreadCandidate bestCandidate;
+
+        if (!minAskEntry.getKey().equals(maxBidEntry.getKey())) {
+            bestCandidate = new PriceSpreadCandidate(
+                    minAskEntry.getKey(), minAskEntry.getValue().ask(), minAskEntry.getValue().volume(),
+                    maxBidEntry.getKey(), maxBidEntry.getValue().bid(), maxBidEntry.getValue().volume()
+            );
+        } else {
+            PriceSpreadCandidate candidate1 = null;
+            if (secondMinAskEntry != null) {
+                candidate1 = new PriceSpreadCandidate(
+                        secondMinAskEntry.getKey(), secondMinAskEntry.getValue().ask(), secondMinAskEntry.getValue().volume(),
+                        maxBidEntry.getKey(), maxBidEntry.getValue().bid(), maxBidEntry.getValue().volume()
+                );
+            }
+
+            PriceSpreadCandidate candidate2 = null;
+            if (secondMaxBidEntry != null) {
+                candidate2 = new PriceSpreadCandidate(
+                        minAskEntry.getKey(), minAskEntry.getValue().ask(), minAskEntry.getValue().volume(),
+                        secondMaxBidEntry.getKey(), secondMaxBidEntry.getValue().bid(), secondMaxBidEntry.getValue().volume()
+                );
+            }
+
+            if (candidate1 != null && candidate2 != null) {
+                bestCandidate = candidate1.spread() > candidate2.spread() ? candidate1 : candidate2;
+            } else if (candidate1 != null) {
+                bestCandidate = candidate1;
+            } else if (candidate2 != null) {
+                bestCandidate = candidate2;
+            } else {
+                return Optional.empty();
+            }
+        }
+
+        if (bestCandidate.spread() <= 0) {
+            return Optional.empty();
+        }
+
+        double profitPercent = (bestCandidate.sellPrice() - bestCandidate.buyPrice()) / bestCandidate.buyPrice() * 100.0;
+        if (profitPercent >= minProfitPercent && profitPercent <= maxProfitPercent) {
+            return Optional.of(new PriceSpreadResult(
+                    pair,
+                    bestCandidate.buyExchange(), bestCandidate.buyPrice(), bestCandidate.buyVolume(),
+                    bestCandidate.sellExchange(), bestCandidate.sellPrice(), bestCandidate.sellVolume(),
+                    bestCandidate.spread(),
+                    profitPercent
+            ));
+        }
+
+        return Optional.empty();
     }
 
     public List<ExchangeType> parseExchangeTypes(List<String> exchanges) {
