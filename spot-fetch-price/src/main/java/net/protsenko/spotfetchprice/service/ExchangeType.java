@@ -19,7 +19,8 @@ public enum ExchangeType {
     BITGET(BitgetExchange.class),
     COINEX(CoinexExchange.class),
     //    HUOBI(HuobiExchange.class),
-    BITFINEX(BitfinexExchange.class);
+    BITFINEX(BitfinexExchange.class),
+    OKX(null);
 
     private final Class<? extends Exchange> exchangeClass;
 

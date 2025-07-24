@@ -4,6 +4,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.stream.Collectors;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -26,17 +28,30 @@ public class ArbitrageScannerService {
 
         for (var pair : pairs) {
             priceSpreadService.findMaxArbitrageSpreadForPair(
-                            pair, exchanges, config.getMinVolume(), config.getMinProfitPercent(), config.getMaxProfitPercent()
-                    )
-                    .ifPresent(spread -> {
-                        log.info("Best arbitrage for pair {}: Buy on {} at {}, sell on {} at {}, spread = ({}%)",
-                                spread.instrument(),
-                                spread.buyExchange(),
-                                spread.buyPrice(),
-                                spread.sellExchange(),
-                                spread.sellPrice(),
-                                spread.spreadPercentage());
-                    });
+                    pair, exchanges, config.getMinVolume(), config.getMinProfitPercent(), config.getMaxProfitPercent()
+            ).ifPresent(spread -> {
+                String buyNetworks = spread.buyTradingInfo().networks().stream()
+                        .map(n -> String.format("%s: withdrawFee=%.4f (deposit: %s, withdraw: %s)",
+                                n.network(), n.withdrawFee(), n.depositEnabled(), n.withdrawEnabled()))
+                        .collect(Collectors.joining("; "));
+                String sellNetworks = spread.sellTradingInfo().networks().stream()
+                        .map(n -> String.format("%s: withdrawFee=%.4f (deposit: %s, withdraw: %s)",
+                                n.network(), n.withdrawFee(), n.depositEnabled(), n.withdrawEnabled()))
+                        .collect(Collectors.joining("; "));
+
+                log.info(
+                        "Best arbitrage for pair {}: Buy on {} at {} [{}], " +
+                                "sell on {} at {} [{}], spread = ({}%)",
+                        spread.instrument(),
+                        spread.buyExchange(),
+                        spread.buyPrice(),
+                        buyNetworks,
+                        spread.sellExchange(),
+                        spread.sellPrice(),
+                        sellNetworks,
+                        spread.profitPercent()
+                );
+            });
         }
 
         log.info("Arbitrage scan completed");

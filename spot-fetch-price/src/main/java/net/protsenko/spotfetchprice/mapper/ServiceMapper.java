@@ -12,6 +12,7 @@ public interface ServiceMapper extends Mappable<PriceSpreadResult, PriceSpreadRe
     @Mapping(target = "instrument", expression = "java(source.instrument().toString())")
     @Mapping(target = "baseCurrency", expression = "java(source.instrument().getBase().toString())")
     @Mapping(target = "counterCurrency", expression = "java(source.instrument().getCounter().toString())")
+    @Mapping(target = "spreadPercentage", source = "profitPercent")
     PriceSpreadResultDTO toDto(PriceSpreadResult source);
 
     @Override

@@ -6,11 +6,13 @@ public record PriceSpreadResult(
         Instrument instrument,
         String buyExchange,
         double buyPrice,
-        Double buyVolume,
+        double buyVolume,
+        TradingInfoDTO buyTradingInfo,
         String sellExchange,
         double sellPrice,
-        Double sellVolume,
+        double sellVolume,
+        TradingInfoDTO sellTradingInfo,
         double spread,
-        double spreadPercentage
+        double profitPercent
 ) {
 }

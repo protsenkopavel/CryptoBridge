@@ -26,6 +26,7 @@ repositories {
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    implementation("org.springframework.boot:spring-boot-starter-webflux")
 
     implementation("org.knowm.xchange:xchange-core:5.2.2")
     implementation("org.knowm.xchange:xchange-bybit:5.2.2")
@@ -40,6 +41,7 @@ dependencies {
     implementation("org.knowm.xchange:xchange-bitfinex:5.2.2")
 
     implementation("com.fasterxml.jackson.core:jackson-databind:2.19.2")
+    implementation("org.json:json:20240303")
     implementation("org.mapstruct:mapstruct:1.6.3")
     annotationProcessor("org.mapstruct:mapstruct-processor:1.6.3")
     compileOnly("org.projectlombok:lombok")

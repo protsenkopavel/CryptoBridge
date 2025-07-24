@@ -29,6 +29,10 @@ public class ExchangeClientFactory {
             return new MexcClient(httpClient, objectMapper);
         }
 
+        if (exchangeType == ExchangeType.OKX) {
+            return new OkxClient(httpClient, objectMapper);
+        }
+
         Exchange exchange = exchangeType.createExchange();
         try {
             exchange.remoteInit();

@@ -3,10 +3,14 @@ package net.protsenko.spotfetchprice.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.protsenko.spotfetchprice.dto.*;
+import net.protsenko.spotfetchprice.service.provider.TradingInfoProviderFactory;
 import org.knowm.xchange.currency.CurrencyPair;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -15,6 +19,7 @@ import java.util.stream.Collectors;
 public class PriceSpreadService {
 
     private final ExchangeService exchangeService;
+    private final TradingInfoProviderFactory tradingInfoProviderFactory;
 
     public List<PriceSpreadResult> findMaxArbitrageSpreadsForPairs(SpreadsRq spreadsRq) {
         List<ExchangeType> exchangeTypes = parseExchangeTypes(spreadsRq.exchanges());
@@ -159,10 +164,17 @@ public class PriceSpreadService {
 
         double profitPercent = (bestCandidate.sellPrice() - bestCandidate.buyPrice()) / bestCandidate.buyPrice() * 100.0;
         if (profitPercent >= minProfitPercent && profitPercent <= maxProfitPercent) {
+            ExchangeType buyType = ExchangeType.valueOf(bestCandidate.buyExchange());
+            ExchangeType sellType = ExchangeType.valueOf(bestCandidate.sellExchange());
+            TradingInfoDTO buyTradingInfo = tradingInfoProviderFactory.getProvider(buyType)
+                    .getTradingInfo(buyType, pair);
+            TradingInfoDTO sellTradingInfo = tradingInfoProviderFactory.getProvider(sellType)
+                    .getTradingInfo(sellType, pair);
+
             return Optional.of(new PriceSpreadResult(
                     pair,
-                    bestCandidate.buyExchange(), bestCandidate.buyPrice(), bestCandidate.buyVolume(),
-                    bestCandidate.sellExchange(), bestCandidate.sellPrice(), bestCandidate.sellVolume(),
+                    bestCandidate.buyExchange(), bestCandidate.buyPrice(), bestCandidate.buyVolume(), buyTradingInfo,
+                    bestCandidate.sellExchange(), bestCandidate.sellPrice(), bestCandidate.sellVolume(), sellTradingInfo,
                     bestCandidate.spread(),
                     profitPercent
             ));
