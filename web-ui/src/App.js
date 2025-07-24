@@ -25,7 +25,7 @@ function App() {
 
     const [minProfit, setMinProfit] = useState(0);
     const [minVolume, setMinVolume] = useState(0);
-    const [maxProfit, setMaxProfit] = useState(0);
+    const [maxProfit, setMaxProfit] = useState(10);
 
     const [filterText, setFilterText] = useState('');
 
@@ -161,14 +161,64 @@ function App() {
             </button>
 
             <h3 style={{ marginTop: 40 }}>Результаты:</h3>
-            <ul>
-                {spreads.length === 0 && !loading && <li>Нет результатов</li>}
-                {spreads.map(spread => (
-                    <li key={`${spread.instrument}-${spread.buyExchange}-${spread.sellExchange}`}>
-                        {spread.instrument} — Купить на {spread.buyExchange} за ${spread.buyPrice.toFixed(6)} (объем: {formatVolume(spread.buyVolume)}), продать на {spread.sellExchange} за ${spread.sellPrice.toFixed(6)} (объем: {formatVolume(spread.sellVolume)}) — спред {spread.spreadPercentage.toFixed(2)}%
-                    </li>
-                ))}
-            </ul>
+            {spreads.length === 0 && !loading && (
+                <div style={{ padding: '10px', backgroundColor: '#ffdddd', color: '#cc0000', borderRadius: '4px' }}>
+                    Нет данных по выбранным критериям
+                </div>
+            )}
+            {spreads.length > 0 && (
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
+                    <thead>
+                        <tr style={{ backgroundColor: '#f5f5f5' }}>
+                            <th style={{ padding: '8px', border: '1px solid #ddd' }}>Инструмент</th>
+                            <th style={{ padding: '8px', border: '1px solid #ddd' }}>Биржа покупки</th>
+                            <th style={{ padding: '8px', border: '1px solid #ddd' }}>Биржа продажи</th>
+                            <th style={{ padding: '8px', border: '1px solid #ddd' }}>Профит%</th>
+                            <th style={{ padding: '8px', border: '1px solid #ddd' }}>Сети вывода</th>
+                            <th style={{ padding: '8px', border: '1px solid #ddd' }}>Сети депозита</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {spreads.map((spread, index) => (
+                            <tr key={`${spread.instrument}-${index}`} style={{ backgroundColor: index % 2 === 0 ? '#fff' : '#f9f9f9' }}>
+                                <td style={{ padding: '8px', border: '1px solid #ddd' }}>{spread.instrument}</td>
+                                <td style={{ padding: '8px', border: '1px solid #ddd' }}>
+                                    <strong>{spread.buyExchange}</strong><br />
+                                    Цена: ${spread.buyPrice.toFixed(6)}<br />
+                                    Объем: {formatVolume(spread.buyVolume)}
+                                </td>
+                                <td style={{ padding: '8px', border: '1px solid #ddd' }}>
+                                    <strong>{spread.sellExchange}</strong><br />
+                                    Цена: ${spread.sellPrice.toFixed(6)}<br />
+                                    Объем: {formatVolume(spread.sellVolume)}
+                                </td>
+                                <td style={{
+                                    padding: '8px',
+                                    border: '1px solid #ddd',
+                                    fontWeight: 'bold',
+                                    color: spread.spreadPercentage > 0 ? 'green' : 'red'
+                                }}>
+                                    {spread.spreadPercentage.toFixed(2)}%
+                                </td>
+                                <td style={{ padding: '8px', border: '1px solid #ddd' }}>
+                                    {spread.buyTradingInfo?.networks?.map(network => (
+                                        <span key={network.network} style={{ color: network.withdrawEnabled ? 'inherit' : 'red' }}>
+                                            {network.network} ({network.withdrawFee === -1 ? 'N/A' : network.withdrawFee})<br />
+                                        </span>
+                                    )) ?? 'N/A'}
+                                </td>
+                                <td style={{ padding: '8px', border: '1px solid #ddd' }}>
+                                    {spread.sellTradingInfo?.networks?.map(network => (
+                                        <span key={network.network} style={{ color: network.depositEnabled ? 'inherit' : 'red' }}>
+                                            {network.network} ({network.withdrawFee === -1 ? 'N/A' : network.withdrawFee})<br />
+                                        </span>
+                                    )) ?? 'N/A'}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            )}
         </div>
     );
 }
