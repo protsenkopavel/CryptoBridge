@@ -33,6 +33,10 @@ public class ExchangeClientFactory {
             return new OkxClient(httpClient, objectMapper);
         }
 
+        if (exchangeType == ExchangeType.BINGX) {
+            return new BingxClient(httpClient, objectMapper);
+        }
+
         Exchange exchange = exchangeType.createExchange();
         try {
             exchange.remoteInit();
