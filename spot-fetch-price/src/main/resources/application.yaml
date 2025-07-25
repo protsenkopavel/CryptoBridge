@@ -43,3 +43,7 @@ exchanger:
       key: ${bitget.api.key:}
       secret: ${bitget.api.secret:}
       passphrase: ${bitget.api.passphrase:}
+    okx:
+      key: ${okx.api.key:}
+      secret: ${okx.api.secret:}
+      passphrase: ${okx.api.passphrase:}

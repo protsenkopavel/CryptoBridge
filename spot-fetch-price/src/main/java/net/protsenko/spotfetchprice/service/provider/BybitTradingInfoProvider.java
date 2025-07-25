@@ -1,6 +1,7 @@
 package net.protsenko.spotfetchprice.service.provider;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import net.protsenko.spotfetchprice.dto.TradingInfoDTO;
 import net.protsenko.spotfetchprice.dto.TradingNetworkInfoDTO;
 import net.protsenko.spotfetchprice.props.BybitApiProperties;
@@ -13,6 +14,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -25,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 import static net.protsenko.spotfetchprice.props.BybitApiProperties.API_URL;
 import static net.protsenko.spotfetchprice.props.BybitApiProperties.RECV_WINDOW;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class BybitTradingInfoProvider implements TradingInfoProvider {
@@ -36,9 +39,9 @@ public class BybitTradingInfoProvider implements TradingInfoProvider {
 
     private final WebClient webClient = WebClient.builder().build();
 
-    private static TradingInfoDTO stub() {
+    private TradingInfoDTO stub() {
         return new TradingInfoDTO(List.of(
-                new TradingNetworkInfoDTO("", -1, false, false)
+                new TradingNetworkInfoDTO("N/A", -1.0, false, false)
         ));
     }
 
@@ -76,7 +79,10 @@ public class BybitTradingInfoProvider implements TradingInfoProvider {
                     .retrieve()
                     .bodyToMono(String.class)
                     .timeout(Duration.ofSeconds(10))
-                    .onErrorReturn("")
+                    .onErrorResume(e -> {
+                        log.error("Ошибка при вызове {} API: {}", exchange.name() , e.getMessage(), e);
+                        return Mono.just("");
+                    })
                     .block();
 
             if (response == null || response.isEmpty()) {
