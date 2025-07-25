@@ -27,6 +27,9 @@ function App() {
     const [minVolume, setMinVolume] = useState(0);
     const [maxProfit, setMaxProfit] = useState(10);
 
+    const [whitelist, setWhitelist] = useState('');
+    const [blacklist, setBlacklist] = useState('');
+
     const [filterText, setFilterText] = useState('');
 
     const [spreads, setSpreads] = useState([]);
@@ -70,6 +73,8 @@ function App() {
             minProfitPercent: minProfit,
             maxProfitPercent: maxProfit,
             minVolume: minVolume,
+            whitelist: whitelist.split(',').map(item => item.trim()).filter(item => item),
+            blacklist: blacklist.split(',').map(item => item.trim()).filter(item => item),
         })
             .then(data => setSpreads(data))
             .finally(() => setLoading(false));
@@ -148,6 +153,30 @@ function App() {
                         value={maxProfit}
                         onChange={e => setMaxProfit(Number(e.target.value))}
                         style={{ marginLeft: 10, width: 60 }}
+                    />
+                </label>
+            </div>
+
+            <div style={{ marginTop: 10 }}>
+                <label>
+                    Белый список пар (через запятую):
+                    <input
+                        type="text"
+                        value={whitelist}
+                        onChange={e => setWhitelist(e.target.value)}
+                        style={{ marginLeft: 10, width: '100%' }}
+                    />
+                </label>
+            </div>
+
+            <div style={{ marginTop: 10 }}>
+                <label>
+                    Черный список пар (через запятую):
+                    <input
+                        type="text"
+                        value={blacklist}
+                        onChange={e => setBlacklist(e.target.value)}
+                        style={{ marginLeft: 10, width: '100%' }}
                     />
                 </label>
             </div>

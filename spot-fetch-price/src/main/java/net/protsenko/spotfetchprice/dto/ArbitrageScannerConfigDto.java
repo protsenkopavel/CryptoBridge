@@ -6,6 +6,9 @@ public record ArbitrageScannerConfigDto(
         List<String> pairsToScan,
         List<String> exchangesToScan,
         double minVolume,
-        double minProfitPercent
+        double minProfitPercent,
+        double maxProfitPercent,
+        List<String> whitelist,
+        List<String> blacklist
 ) {
 }

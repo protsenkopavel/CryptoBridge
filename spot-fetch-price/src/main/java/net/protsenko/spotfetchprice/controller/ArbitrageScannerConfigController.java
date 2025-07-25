@@ -26,5 +26,8 @@ public class ArbitrageScannerConfigController {
         config.setExchangesToScan(newConfig.getExchangesToScan());
         config.setMinVolume(newConfig.getMinVolume());
         config.setMinProfitPercent(newConfig.getMinProfitPercent());
+        config.setMaxProfitPercent(newConfig.getMaxProfitPercent());
+        config.setWhitelist(newConfig.getWhitelist());
+        config.setBlacklist(newConfig.getBlacklist());
     }
 }

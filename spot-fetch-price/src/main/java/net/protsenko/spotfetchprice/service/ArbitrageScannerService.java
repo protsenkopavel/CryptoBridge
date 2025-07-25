@@ -22,6 +22,21 @@ public class ArbitrageScannerService {
                 ? config.getPairsToScan()
                 : exchangeService.getAvailableCurrencyPairs(config.getExchangesToScan());
 
+        pairs = pairs.stream()
+                .filter(pair -> {
+                    String counter = pair.getCounter().toString();
+
+                    boolean allowed =
+                            (config.getWhitelist() == null ||
+                            config.getWhitelist().isEmpty()) ||
+                            config.getWhitelist().contains(counter);
+
+                    boolean forbidden = (config.getBlacklist() != null && config.getBlacklist().contains(counter));
+
+                    return allowed && !forbidden;
+                })
+                .toList();
+
         var exchanges = config.getExchangesToScan() != null
                 ? config.getExchangesToScan()
                 : exchangeService.getAvailableExchanges();

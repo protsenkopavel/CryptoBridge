@@ -7,7 +7,9 @@ public record SpreadsRq(
         List<String> exchanges,
         Double minVolume,
         Double minProfitPercent,
-        Double maxProfitPercent
+        Double maxProfitPercent,
+        List<String> whitelist,
+        List<String> blacklist
 ) {
     public SpreadsRq {
         if (minVolume == null) minVolume = 0.0;

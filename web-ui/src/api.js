@@ -18,5 +18,7 @@ export const fetchBestSpreads = (filters) =>
         sellVolume: Number(spread.sellVolume),
         spreadPercentage: Number(spread.spreadPercentage),
         buyTradingInfo: spread.buyTradingInfo,
-        sellTradingInfo: spread.sellTradingInfo
+        sellTradingInfo: spread.sellTradingInfo,
+        whitelist: spread.whitelist,
+        blacklist: spread.blacklist
     })));

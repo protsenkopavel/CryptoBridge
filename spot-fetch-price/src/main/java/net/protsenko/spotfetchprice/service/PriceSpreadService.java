@@ -31,6 +31,8 @@ public class PriceSpreadService {
             currencyPairs = parseCurrencyPairs(spreadsRq.pairs());
         }
 
+        currencyPairs = filterCurrencyPairs(currencyPairs, spreadsRq.whitelist(), spreadsRq.blacklist());
+
         List<ExchangeTickersDTO> allTickers = exchangeService.getAllMarketDataForAllExchanges(exchangeTypes, currencyPairs);
 
         Map<CurrencyPair, Map<String, TickerData>> tickersByPair = new HashMap<>();
@@ -50,6 +52,20 @@ public class PriceSpreadService {
                 .map(entry -> findMaxSpread(entry.getKey(), entry.getValue(), spreadsRq.minProfitPercent(), spreadsRq.maxProfitPercent()))
                 .filter(Optional::isPresent)
                 .map(Optional::get)
+                .collect(Collectors.toList());
+    }
+
+    private List<CurrencyPair> filterCurrencyPairs(List<CurrencyPair> pairs, List<String> whitelist, List<String> blacklist) {
+        return pairs.stream()
+                .filter(pair -> {
+                    String counter = pair.getCounter().toString();
+
+                    boolean allowed = (whitelist == null || whitelist.isEmpty()) || whitelist.contains(counter);
+
+                    boolean forbidden = (blacklist != null && blacklist.contains(counter));
+
+                    return allowed && !forbidden;
+                })
                 .collect(Collectors.toList());
     }
 

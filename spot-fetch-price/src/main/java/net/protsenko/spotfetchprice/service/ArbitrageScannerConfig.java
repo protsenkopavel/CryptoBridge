@@ -20,4 +20,8 @@ public class ArbitrageScannerConfig {
 
     private double maxProfitPercent = 100.0;
 
+    private List<String> whitelist = null;
+
+    private List<String> blacklist = null;
+
 }
