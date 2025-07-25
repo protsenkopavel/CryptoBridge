@@ -21,6 +21,8 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -46,7 +48,7 @@ public class OkxTradingInfoProvider implements TradingInfoProvider {
         ));
     }
 
-    private static String sign(String preHash, String secret) throws Exception {
+    private String sign(String preHash, String secret) throws Exception {
         Mac sha256Mac = Mac.getInstance("HmacSHA256");
         SecretKeySpec secretKey = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
         sha256Mac.init(secretKey);
@@ -64,23 +66,29 @@ public class OkxTradingInfoProvider implements TradingInfoProvider {
 
         try {
             String method = "GET";
-            String requestPath = "/api/v5/asset/currencies?ccy=" + coin;
+            String endpointPath = "/api/v5/asset/currencies";
+            String query = "?ccy=" + coin;
+            String requestPathWithParams = endpointPath + query;
             String body = "";
-            String timestamp = Instant.now().toString();
-            String preHash = timestamp + method + requestPath + body;
+            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+                    .withZone(ZoneOffset.UTC);
+            String timestamp = fmt.format(Instant.now());
+
+            String preHash = timestamp + method + requestPathWithParams + body;
             String sign = sign(preHash, okxApiProperties.getSecret());
 
             String response = webClient.get()
-                    .uri(requestPath)
+                    .uri(requestPathWithParams)
                     .header("OK-ACCESS-KEY", okxApiProperties.getKey())
                     .header("OK-ACCESS-SIGN", sign)
                     .header("OK-ACCESS-TIMESTAMP", timestamp)
                     .header("OK-ACCESS-PASSPHRASE", okxApiProperties.getPassphrase())
+                    .header("Accept", "application/json")
                     .retrieve()
                     .bodyToMono(String.class)
                     .timeout(Duration.ofSeconds(10))
                     .onErrorResume(e -> {
-                        log.error("Ошибка при вызове {} API: {}", exchange.name() , e.getMessage(), e);
+                        log.error("Ошибка при вызове {} API: {}", exchange.name(), e.getMessage(), e);
                         return Mono.just("");
                     })
                     .block();
@@ -104,10 +112,11 @@ public class OkxTradingInfoProvider implements TradingInfoProvider {
                 boolean depositEnable = obj.optBoolean("canDep", false);
                 boolean withdrawEnable = obj.optBoolean("canWd", false);
                 double withdrawFee = -1;
-                if (obj.has("wdFee")) {
+                if (obj.has("fee")) {
                     try {
-                        withdrawFee = Double.parseDouble(obj.optString("wdFee", "-1"));
-                    } catch (Exception ignore) {}
+                        withdrawFee = Double.parseDouble(obj.optString("fee", "-1"));
+                    } catch (Exception ignore) {
+                    }
                 }
                 networks.add(new TradingNetworkInfoDTO(
                         chain,
@@ -121,7 +130,7 @@ public class OkxTradingInfoProvider implements TradingInfoProvider {
             ops.set(redisKey, dto, 10, TimeUnit.MINUTES);
             return dto;
         } catch (Exception ex) {
-            ex.printStackTrace();
+            log.error("Ошибка получения данных OKX: ", ex);
             return stub();
         }
     }
