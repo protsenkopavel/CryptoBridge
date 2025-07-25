@@ -8,6 +8,20 @@ services:
     networks:
       - crypto-net
 
+  postgres:
+    image: postgres:16.9
+    ports:
+      - "${DB_PORT_EXTERNAL:-15432}:${DB_PORT_INTERNAL:-5432}"
+    environment:
+      POSTGRES_USER: ${DB_USER:-admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-pass}
+      POSTGRES_DB: ${DB_NAME:-crypto_bridge_db}
+    volumes:
+      - "${DB_VOLUME:-/crypto-bridge-db-data}:/var/lib/postgresql/data"
+    restart: unless-stopped
+    networks:
+      - crypto-net
+
   spot-fetch-price:
     build: ./spot-fetch-price
     container_name: spot-fetch-price

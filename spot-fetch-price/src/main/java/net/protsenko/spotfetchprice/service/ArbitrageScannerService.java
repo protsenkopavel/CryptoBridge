@@ -13,6 +13,7 @@ public class ArbitrageScannerService {
 
     private final ExchangeService exchangeService;
     private final PriceSpreadService priceSpreadService;
+    private final ArbitrageScannerConfigService arbitrageScannerConfigService;
     private final ArbitrageScannerConfig config;
 
     public void scanBestSpreads() {
@@ -22,16 +23,17 @@ public class ArbitrageScannerService {
                 ? config.getPairsToScan()
                 : exchangeService.getAvailableCurrencyPairs(config.getExchangesToScan());
 
+        var whitelist = arbitrageScannerConfigService.getWhitelist();
+        var blacklist = arbitrageScannerConfigService.getBlacklist();
+
         pairs = pairs.stream()
                 .filter(pair -> {
                     String counter = pair.getCounter().toString();
 
                     boolean allowed =
-                            (config.getWhitelist() == null ||
-                            config.getWhitelist().isEmpty()) ||
-                            config.getWhitelist().contains(counter);
+                            (whitelist == null || whitelist.isEmpty()) || whitelist.contains(counter);
 
-                    boolean forbidden = (config.getBlacklist() != null && config.getBlacklist().contains(counter));
+                    boolean forbidden = (blacklist) != null && blacklist.contains(counter);
 
                     return allowed && !forbidden;
                 })

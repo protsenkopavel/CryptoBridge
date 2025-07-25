@@ -4,6 +4,20 @@ server:
 spring:
   application:
     name: spot-fetch-price
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    password: ${DB_PASSWORD:pass}
+    username: ${DB_USER:admin}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT_EXTERNAL:15432}/${DB_NAME:crypto_bridge_db}
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: none
+    show-sql: true
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+    drop-first: false
+    enabled: true
   data:
     redis:
       host: localhost

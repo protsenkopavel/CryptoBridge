@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.0.xsd">
+
+    <changeSet id="init_config_table" author="me">
+        <sql>
+            CREATE TABLE arbitrage_coin_whitelist
+            (
+                id     SERIAL PRIMARY KEY,
+                symbol VARCHAR(16) NOT NULL UNIQUE
+            );
+
+            CREATE TABLE arbitrage_coin_blacklist
+            (
+                id     SERIAL PRIMARY KEY,
+                symbol VARCHAR(16) NOT NULL UNIQUE
+            );
+        </sql>
+        <rollback>
+            DROP TABLE arbitrage_coin_whitelist;
+            DROP TABLE arbitrage_coin_blacklist;
+        </rollback>
+    </changeSet>
+</databaseChangeLog>
