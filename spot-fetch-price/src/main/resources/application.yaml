@@ -47,3 +47,6 @@ exchanger:
       key: ${okx.api.key:}
       secret: ${okx.api.secret:}
       passphrase: ${okx.api.passphrase:}
+    bingx:
+      key: ${bingx.api.key:}
+      secret: ${bingx.api.secret:}
