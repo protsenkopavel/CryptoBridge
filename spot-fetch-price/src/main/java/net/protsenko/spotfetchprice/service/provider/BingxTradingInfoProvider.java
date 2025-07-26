@@ -12,9 +12,12 @@ import org.knowm.xchange.currency.CurrencyPair;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import reactor.netty.http.client.HttpClient;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -38,6 +41,14 @@ public class BingxTradingInfoProvider implements TradingInfoProvider {
 
     private final WebClient webClient = WebClient.builder()
             .baseUrl("https://open-api.bingx.com")
+            .exchangeStrategies(ExchangeStrategies.builder()
+                    .codecs(configurer -> configurer
+                            .defaultCodecs()
+                            .maxInMemorySize(20 * 1024 * 1024)
+                    )
+                    .build())
+            .clientConnector(new ReactorClientHttpConnector(HttpClient.create()
+                    .responseTimeout(Duration.ofSeconds(60))))
             .build();
 
     private TradingInfoDTO stub() {
@@ -112,7 +123,7 @@ public class BingxTradingInfoProvider implements TradingInfoProvider {
                     .header("User-Agent", "Mozilla/5.0")
                     .retrieve()
                     .bodyToMono(String.class)
-                    .timeout(Duration.ofSeconds(10))
+                    .timeout(Duration.ofSeconds(60))
                     .onErrorResume(e -> {
                         log.error("Ошибка при вызове {} API: {}", exchange.name(), e.getMessage(), e);
                         return Mono.just("");

@@ -12,10 +12,16 @@ import org.knowm.xchange.currency.CurrencyPair;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import reactor.netty.http.client.HttpClient;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,6 +39,14 @@ public class MEXCTradingInfoProvider implements TradingInfoProvider {
 
     private final WebClient webClient = WebClient.builder()
             .baseUrl("https://api.mexc.com")
+            .exchangeStrategies(ExchangeStrategies.builder()
+                    .codecs(configurer -> configurer
+                            .defaultCodecs()
+                            .maxInMemorySize(20 * 1024 * 1024)
+                    )
+                    .build())
+            .clientConnector(new ReactorClientHttpConnector(HttpClient.create()
+                    .responseTimeout(Duration.ofSeconds(60))))
             .build();
 
     private TradingInfoDTO stub() {
@@ -50,16 +64,22 @@ public class MEXCTradingInfoProvider implements TradingInfoProvider {
         if (cached != null) return cached;
 
         try {
-            String url = "/api/v3/capital/config/getall";
+            long timestamp = System.currentTimeMillis();
+            int recvWindow = 5000;
+            String params = "timestamp=" + timestamp + "&recvWindow=" + recvWindow;
+
+            String signature = hmacSHA256Hex(apiProperties.getSecret(), params);
+
+            String url = "/api/v3/capital/config/getall?" + params + "&signature=" + signature;
 
             String response = webClient.get()
                     .uri(url)
                     .header("X-MEXC-APIKEY", apiProperties.getKey())
                     .retrieve()
                     .bodyToMono(String.class)
-                    .timeout(Duration.ofSeconds(15))
+                    .timeout(Duration.ofSeconds(60))
                     .onErrorResume(e -> {
-                        log.error("Ошибка при вызове {} API: {}", exchange.name() , e.getMessage(), e);
+                        log.error("Ошибка при вызове {} API: {}", exchange.name(), e.getMessage(), e);
                         return Mono.just("");
                     })
                     .block();
@@ -83,7 +103,7 @@ public class MEXCTradingInfoProvider implements TradingInfoProvider {
             List<TradingNetworkInfoDTO> networks = new ArrayList<>();
             for (int i = 0; i < networkList.length(); i++) {
                 JSONObject net = networkList.getJSONObject(i);
-                String network = net.optString("network");
+                String network = net.optString("network", net.optString("netWork"));
                 boolean depositEnable = net.optBoolean("depositEnable", false);
                 boolean withdrawEnable = net.optBoolean("withdrawEnable", false);
                 double withdrawFee = -1;
@@ -103,5 +123,20 @@ public class MEXCTradingInfoProvider implements TradingInfoProvider {
             ex.printStackTrace();
             return stub();
         }
+    }
+
+    private String hmacSHA256Hex(String key, String data) throws Exception {
+        Mac sha256_HMAC = Mac.getInstance("HmacSHA256");
+        SecretKeySpec secret_key = new SecretKeySpec(key.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+        sha256_HMAC.init(secret_key);
+
+        byte[] hash = sha256_HMAC.doFinal(data.getBytes(StandardCharsets.UTF_8));
+        StringBuilder hexString = new StringBuilder(2 * hash.length);
+        for (byte b : hash) {
+            String hex = Integer.toHexString(0xff & b);
+            if (hex.length() == 1) hexString.append('0');
+            hexString.append(hex);
+        }
+        return hexString.toString();
     }
 }

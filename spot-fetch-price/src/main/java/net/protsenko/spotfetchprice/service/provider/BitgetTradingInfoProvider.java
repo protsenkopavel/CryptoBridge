@@ -38,11 +38,11 @@ public class BitgetTradingInfoProvider implements TradingInfoProvider {
             .exchangeStrategies(ExchangeStrategies.builder()
                     .codecs(configurer -> configurer
                             .defaultCodecs()
-                            .maxInMemorySize(2 * 1024 * 1024)
+                            .maxInMemorySize(20 * 1024 * 1024)
                     )
                     .build())
             .clientConnector(new ReactorClientHttpConnector(HttpClient.create()
-                    .responseTimeout(Duration.ofSeconds(15))))
+                    .responseTimeout(Duration.ofSeconds(60))))
             .build();
 
     private TradingInfoDTO stub() {
@@ -65,7 +65,7 @@ public class BitgetTradingInfoProvider implements TradingInfoProvider {
                     .uri(url)
                     .retrieve()
                     .bodyToMono(String.class)
-                    .timeout(Duration.ofSeconds(10))
+                    .timeout(Duration.ofSeconds(60))
                     .onErrorResume(e -> {
                         log.error("Ошибка при вызове {} API: {}", exchange.name(), e.getMessage(), e);
                         return Mono.just("");
