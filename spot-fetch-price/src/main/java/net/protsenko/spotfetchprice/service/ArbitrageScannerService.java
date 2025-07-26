@@ -2,6 +2,9 @@ package net.protsenko.spotfetchprice.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.protsenko.spotfetchprice.dto.ArbitrageOpportunityFoundEvent;
+import net.protsenko.spotfetchprice.mapper.ServiceMapper;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.stream.Collectors;
@@ -15,6 +18,8 @@ public class ArbitrageScannerService {
     private final PriceSpreadService priceSpreadService;
     private final ArbitrageScannerConfigService arbitrageScannerConfigService;
     private final ArbitrageScannerConfig config;
+    private final ApplicationEventPublisher eventPublisher;
+    private final ServiceMapper serviceMapper;
 
     public void scanBestSpreads() {
         log.info("Starting arbitrage scan");
@@ -68,6 +73,8 @@ public class ArbitrageScannerService {
                         sellNetworks,
                         spread.profitPercent()
                 );
+
+                eventPublisher.publishEvent(new ArbitrageOpportunityFoundEvent(serviceMapper.toDto(spread)));
             });
         }
 

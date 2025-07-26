@@ -3,6 +3,7 @@ package net.protsenko.cryptobridge.telegramnotifier.service;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.protsenko.cryptobridge.telegramnotifier.dto.PriceSpreadResultDTO;
 import net.protsenko.cryptobridge.telegramnotifier.props.TelegramBotProperties;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
@@ -40,6 +41,11 @@ public class TelegramBotService extends TelegramLongPollingBot {
     @Override
     public String getBotToken() {
         return properties.getToken();
+    }
+
+    public void notifyUsers(PriceSpreadResultDTO spread) {
+        // TODO Реализовать отправку в Telegram
+        log.info("Обработано событие {}", spread.toString());
     }
 
 }

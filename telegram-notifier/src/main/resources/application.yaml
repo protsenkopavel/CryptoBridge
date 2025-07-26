@@ -4,8 +4,20 @@ server:
 spring:
   application:
     name: telegram-notifier
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
 
 telegram:
   bot:
     username: ${TELEGRAM_BOT_USERNAME}
     token: ${TELEGRAM_BOT_TOKEN}
+
+arbitrage:
+  rabbit:
+    queue-name: arbitrage.events
+    exchange-name: arbitrage.exchange
+    routing-key: arbitrage.opportunity

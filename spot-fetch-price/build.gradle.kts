@@ -29,6 +29,7 @@ dependencies {
     implementation("org.liquibase:liquibase-core")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-webflux")
+    implementation("org.springframework.boot:spring-boot-starter-amqp")
 
     implementation("org.knowm.xchange:xchange-core:5.2.2")
     implementation("org.knowm.xchange:xchange-bybit:5.2.2")

@@ -22,6 +22,24 @@ services:
     networks:
       - crypto-net
 
+  rabbitmq:
+    image: rabbitmq:4.1.2-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "ping" ]
+      interval: 20s
+      timeout: 10s
+      retries: 3
+    networks:
+      - crypto-net
+
   spot-fetch-price:
     build: ./spot-fetch-price
     container_name: spot-fetch-price
