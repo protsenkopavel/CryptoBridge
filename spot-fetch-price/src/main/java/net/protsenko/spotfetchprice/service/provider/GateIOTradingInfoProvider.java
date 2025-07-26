@@ -25,4 +25,5 @@ public class GateIOTradingInfoProvider implements TradingInfoProvider {
     public TradingInfoDTO getTradingInfo(ExchangeType exchange, CurrencyPair pair) {
         return stub();
     }
+
 }

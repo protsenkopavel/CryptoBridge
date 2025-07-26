@@ -27,6 +27,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import static net.protsenko.spotfetchprice.util.NetworkNormalizer.normalize;
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -48,12 +50,6 @@ public class MEXCTradingInfoProvider implements TradingInfoProvider {
             .clientConnector(new ReactorClientHttpConnector(HttpClient.create()
                     .responseTimeout(Duration.ofSeconds(60))))
             .build();
-
-    private TradingInfoDTO stub() {
-        return new TradingInfoDTO(List.of(
-                new TradingNetworkInfoDTO("N/A", -1.0, false, false)
-        ));
-    }
 
     @Override
     public TradingInfoDTO getTradingInfo(ExchangeType exchange, CurrencyPair pair) {
@@ -103,7 +99,8 @@ public class MEXCTradingInfoProvider implements TradingInfoProvider {
             List<TradingNetworkInfoDTO> networks = new ArrayList<>();
             for (int i = 0; i < networkList.length(); i++) {
                 JSONObject net = networkList.getJSONObject(i);
-                String network = net.optString("network", net.optString("netWork"));
+                String networkRaw = net.optString("network", net.optString("netWork"));
+                String network = normalize(networkRaw);
                 boolean depositEnable = net.optBoolean("depositEnable", false);
                 boolean withdrawEnable = net.optBoolean("withdrawEnable", false);
                 double withdrawFee = -1;
@@ -117,7 +114,7 @@ public class MEXCTradingInfoProvider implements TradingInfoProvider {
             }
 
             TradingInfoDTO dto = new TradingInfoDTO(networks);
-            ops.set(redisKey, dto, 10, TimeUnit.MINUTES);
+            ops.set(redisKey, dto, 24, TimeUnit.HOURS);
             return dto;
         } catch (Exception ex) {
             ex.printStackTrace();
@@ -139,4 +136,11 @@ public class MEXCTradingInfoProvider implements TradingInfoProvider {
         }
         return hexString.toString();
     }
+
+    private TradingInfoDTO stub() {
+        return new TradingInfoDTO(List.of(
+                new TradingNetworkInfoDTO("N/A", -1.0, false, false)
+        ));
+    }
+
 }

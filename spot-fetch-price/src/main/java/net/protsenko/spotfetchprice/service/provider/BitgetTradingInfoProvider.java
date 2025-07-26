@@ -5,7 +5,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.protsenko.spotfetchprice.dto.TradingInfoDTO;
 import net.protsenko.spotfetchprice.dto.TradingNetworkInfoDTO;
-import net.protsenko.spotfetchprice.props.BitgetApiProperties;
 import net.protsenko.spotfetchprice.service.ExchangeType;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -24,6 +23,8 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+
+import static net.protsenko.spotfetchprice.util.NetworkNormalizer.normalize;
 
 @Slf4j
 @Component
@@ -44,12 +45,6 @@ public class BitgetTradingInfoProvider implements TradingInfoProvider {
             .clientConnector(new ReactorClientHttpConnector(HttpClient.create()
                     .responseTimeout(Duration.ofSeconds(60))))
             .build();
-
-    private TradingInfoDTO stub() {
-        return new TradingInfoDTO(List.of(
-                new TradingNetworkInfoDTO("N/A", -1.0, false, false)
-        ));
-    }
 
     @Override
     public TradingInfoDTO getTradingInfo(ExchangeType exchange, CurrencyPair pair) {
@@ -99,24 +94,33 @@ public class BitgetTradingInfoProvider implements TradingInfoProvider {
             List<TradingNetworkInfoDTO> networks = new ArrayList<>();
             for (int i = 0; i < chains.length(); i++) {
                 JSONObject chain = chains.getJSONObject(i);
-                String network = chain.optString("chain", "");
+                String networkRaw = chain.optString("chain", "");
+                String network = normalize(networkRaw);
                 boolean depositEnable = "true".equalsIgnoreCase(chain.optString("rechargeable", "false"));
                 boolean withdrawEnable = "true".equalsIgnoreCase(chain.optString("withdrawable", "false"));
                 double withdrawFee = -1;
                 if (chain.has("withdrawFee")) {
                     try {
                         withdrawFee = Double.parseDouble(chain.optString("withdrawFee", "-1"));
-                    } catch (Exception ignore) {}
+                    } catch (Exception ignore) {
+                    }
                 }
                 networks.add(new TradingNetworkInfoDTO(network, withdrawFee, depositEnable, withdrawEnable));
             }
 
             TradingInfoDTO dto = new TradingInfoDTO(networks);
-            ops.set(redisKey, dto, 10, TimeUnit.MINUTES);
+            ops.set(redisKey, dto, 24, TimeUnit.HOURS);
             return dto;
         } catch (Exception ex) {
             ex.printStackTrace();
             return stub();
         }
     }
+
+    private TradingInfoDTO stub() {
+        return new TradingInfoDTO(List.of(
+                new TradingNetworkInfoDTO("N/A", -1.0, false, false)
+        ));
+    }
+
 }

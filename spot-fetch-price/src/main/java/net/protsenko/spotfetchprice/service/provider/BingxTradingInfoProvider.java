@@ -29,6 +29,8 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 
+import static net.protsenko.spotfetchprice.util.NetworkNormalizer.normalize;
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -50,51 +52,6 @@ public class BingxTradingInfoProvider implements TradingInfoProvider {
             .clientConnector(new ReactorClientHttpConnector(HttpClient.create()
                     .responseTimeout(Duration.ofSeconds(60))))
             .build();
-
-    private TradingInfoDTO stub() {
-        return new TradingInfoDTO(List.of(
-                new TradingNetworkInfoDTO("N/A", -1.0, false, false)
-        ));
-    }
-
-    private String bytesToHex(byte[] bytes) {
-        char[] hexChars = new char[bytes.length * 2];
-        for (int j = 0; j < bytes.length; j++) {
-            int v = bytes[j] & 0xFF;
-            hexChars[j * 2] = HEX_ARRAY[v >>> 4];
-            hexChars[j * 2 + 1] = HEX_ARRAY[v & 0x0F];
-        }
-        return new String(hexChars);
-    }
-
-    private byte[] hmac(String algorithm, byte[] key, byte[] message) throws Exception {
-        Mac mac = Mac.getInstance(algorithm);
-        mac.init(new SecretKeySpec(key, algorithm));
-        return mac.doFinal(message);
-    }
-
-    private String generateHmac256(String message) {
-        try {
-            byte[] bytes = hmac("HmacSHA256", bingxApiProperties.getSecret().getBytes(StandardCharsets.UTF_8), message.getBytes(StandardCharsets.UTF_8));
-            return bytesToHex(bytes);
-        } catch (Exception e) {
-            log.error("generateHmac256 exception: {}", e.toString());
-        }
-        return "";
-    }
-
-    private String getMessageToDigest(TreeMap<String, String> parameters) {
-        boolean first = true;
-        StringBuilder valueToDigest = new StringBuilder();
-        for (Map.Entry<String, String> e : parameters.entrySet()) {
-            if (!first) {
-                valueToDigest.append("&");
-            }
-            first = false;
-            valueToDigest.append(e.getKey()).append("=").append(e.getValue());
-        }
-        return valueToDigest.toString();
-    }
 
     @Override
     public TradingInfoDTO getTradingInfo(ExchangeType exchange, CurrencyPair pair) {
@@ -157,7 +114,8 @@ public class BingxTradingInfoProvider implements TradingInfoProvider {
             List<TradingNetworkInfoDTO> networks = new ArrayList<>();
             for (int i = 0; i < chains.length(); i++) {
                 JSONObject chain = chains.getJSONObject(i);
-                String network = chain.optString("network", "");
+                String networkRaw = chain.optString("network", "");
+                String network = normalize(networkRaw);
                 boolean depositEnable = chain.optBoolean("depositEnable", false);
                 boolean withdrawEnable = chain.optBoolean("withdrawEnable", false);
                 double withdrawFee = -1;
@@ -171,11 +129,57 @@ public class BingxTradingInfoProvider implements TradingInfoProvider {
             }
 
             TradingInfoDTO dto = new TradingInfoDTO(networks);
-            ops.set(redisKey, dto, 10, TimeUnit.MINUTES);
+            ops.set(redisKey, dto, 24, TimeUnit.HOURS);
             return dto;
         } catch (Exception ex) {
             log.error("Ошибка получения данных BingX: ", ex);
             return stub();
         }
     }
+
+    private TradingInfoDTO stub() {
+        return new TradingInfoDTO(List.of(
+                new TradingNetworkInfoDTO("N/A", -1.0, false, false)
+        ));
+    }
+
+    private String bytesToHex(byte[] bytes) {
+        char[] hexChars = new char[bytes.length * 2];
+        for (int j = 0; j < bytes.length; j++) {
+            int v = bytes[j] & 0xFF;
+            hexChars[j * 2] = HEX_ARRAY[v >>> 4];
+            hexChars[j * 2 + 1] = HEX_ARRAY[v & 0x0F];
+        }
+        return new String(hexChars);
+    }
+
+    private byte[] hmac(String algorithm, byte[] key, byte[] message) throws Exception {
+        Mac mac = Mac.getInstance(algorithm);
+        mac.init(new SecretKeySpec(key, algorithm));
+        return mac.doFinal(message);
+    }
+
+    private String generateHmac256(String message) {
+        try {
+            byte[] bytes = hmac("HmacSHA256", bingxApiProperties.getSecret().getBytes(StandardCharsets.UTF_8), message.getBytes(StandardCharsets.UTF_8));
+            return bytesToHex(bytes);
+        } catch (Exception e) {
+            log.error("generateHmac256 exception: {}", e.toString());
+        }
+        return "";
+    }
+
+    private String getMessageToDigest(TreeMap<String, String> parameters) {
+        boolean first = true;
+        StringBuilder valueToDigest = new StringBuilder();
+        for (Map.Entry<String, String> e : parameters.entrySet()) {
+            if (!first) {
+                valueToDigest.append("&");
+            }
+            first = false;
+            valueToDigest.append(e.getKey()).append("=").append(e.getValue());
+        }
+        return valueToDigest.toString();
+    }
+
 }

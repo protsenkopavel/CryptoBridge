@@ -28,6 +28,8 @@ import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import static net.protsenko.spotfetchprice.util.NetworkNormalizer.normalize;
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -41,20 +43,6 @@ public class OkxTradingInfoProvider implements TradingInfoProvider {
     private final WebClient webClient = WebClient.builder()
             .baseUrl("https://www.okx.com")
             .build();
-
-    private TradingInfoDTO stub() {
-        return new TradingInfoDTO(List.of(
-                new TradingNetworkInfoDTO("N/A", -1.0, false, false)
-        ));
-    }
-
-    private String sign(String preHash, String secret) throws Exception {
-        Mac sha256Mac = Mac.getInstance("HmacSHA256");
-        SecretKeySpec secretKey = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
-        sha256Mac.init(secretKey);
-        byte[] hash = sha256Mac.doFinal(preHash.getBytes(StandardCharsets.UTF_8));
-        return Base64.getEncoder().encodeToString(hash);
-    }
 
     @Override
     public TradingInfoDTO getTradingInfo(ExchangeType exchange, CurrencyPair pair) {
@@ -108,7 +96,9 @@ public class OkxTradingInfoProvider implements TradingInfoProvider {
             for (int i = 0; i < dataArr.length(); i++) {
                 JSONObject obj = dataArr.getJSONObject(i);
 
-                String chain = obj.optString("chain", "");
+                String networkRaw = obj.optString("chain", "");
+                String network = normalize(networkRaw);
+
                 boolean depositEnable = obj.optBoolean("canDep", false);
                 boolean withdrawEnable = obj.optBoolean("canWd", false);
                 double withdrawFee = -1;
@@ -119,7 +109,7 @@ public class OkxTradingInfoProvider implements TradingInfoProvider {
                     }
                 }
                 networks.add(new TradingNetworkInfoDTO(
-                        chain,
+                        network,
                         withdrawFee,
                         depositEnable,
                         withdrawEnable
@@ -127,11 +117,26 @@ public class OkxTradingInfoProvider implements TradingInfoProvider {
             }
 
             TradingInfoDTO dto = new TradingInfoDTO(networks);
-            ops.set(redisKey, dto, 10, TimeUnit.MINUTES);
+            ops.set(redisKey, dto, 24, TimeUnit.HOURS);
             return dto;
         } catch (Exception ex) {
             log.error("Ошибка получения данных OKX: ", ex);
             return stub();
         }
     }
+
+    private TradingInfoDTO stub() {
+        return new TradingInfoDTO(List.of(
+                new TradingNetworkInfoDTO("N/A", -1.0, false, false)
+        ));
+    }
+
+    private String sign(String preHash, String secret) throws Exception {
+        Mac sha256Mac = Mac.getInstance("HmacSHA256");
+        SecretKeySpec secretKey = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+        sha256Mac.init(secretKey);
+        byte[] hash = sha256Mac.doFinal(preHash.getBytes(StandardCharsets.UTF_8));
+        return Base64.getEncoder().encodeToString(hash);
+    }
+
 }

@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static net.protsenko.spotfetchprice.props.KucoinApiProperties.API_URL;
+import static net.protsenko.spotfetchprice.util.NetworkNormalizer.normalize;
 
 @Slf4j
 @Component
@@ -39,21 +40,6 @@ public class KucoinTradingInfoProvider implements TradingInfoProvider {
     private final WebClient webClient = WebClient.builder()
             .baseUrl(API_URL)
             .build();
-
-    private TradingInfoDTO stub() {
-        return new TradingInfoDTO(List.of(
-                new TradingNetworkInfoDTO("N/A", -1.0, false, false)
-        ));
-    }
-
-    private static String sign(String message, String secret) throws Exception {
-        Mac mac = Mac.getInstance("HmacSHA256");
-        mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-        byte[] sig = mac.doFinal(message.getBytes(StandardCharsets.UTF_8));
-        StringBuilder hex = new StringBuilder();
-        for (byte b : sig) hex.append(String.format("%02x", b));
-        return hex.toString();
-    }
 
     @Override
     public TradingInfoDTO getTradingInfo(ExchangeType exchange, CurrencyPair pair) {
@@ -83,7 +69,7 @@ public class KucoinTradingInfoProvider implements TradingInfoProvider {
                     .bodyToMono(String.class)
                     .timeout(Duration.ofSeconds(10))
                     .onErrorResume(e -> {
-                        log.error("Ошибка при вызове {} API: {}", exchange.name() , e.getMessage(), e);
+                        log.error("Ошибка при вызове {} API: {}", exchange.name(), e.getMessage(), e);
                         return Mono.just("");
                     })
                     .block();
@@ -109,7 +95,8 @@ public class KucoinTradingInfoProvider implements TradingInfoProvider {
 
             for (int i = 0; i < chains.length(); i++) {
                 JSONObject chain = chains.getJSONObject(i);
-                String chainName = chain.optString("chainName", "");
+                String networkRaw = chain.optString("chainName", "");
+                String network = normalize(networkRaw);
                 boolean depositEnabled = chain.optBoolean("isDepositEnabled", false);
                 boolean withdrawEnabled = chain.optBoolean("isWithdrawEnabled", false);
                 double withdrawFee = 0;
@@ -118,11 +105,11 @@ public class KucoinTradingInfoProvider implements TradingInfoProvider {
                 } catch (Exception ignore) {
                 }
 
-                networks.add(new TradingNetworkInfoDTO(chainName, withdrawFee, depositEnabled, withdrawEnabled));
+                networks.add(new TradingNetworkInfoDTO(network, withdrawFee, depositEnabled, withdrawEnabled));
             }
 
             TradingInfoDTO dto = new TradingInfoDTO(networks);
-            ops.set(redisKey, dto, 10, TimeUnit.MINUTES);
+            ops.set(redisKey, dto, 24, TimeUnit.HOURS);
             return dto;
 
         } catch (Exception ex) {
@@ -130,4 +117,20 @@ public class KucoinTradingInfoProvider implements TradingInfoProvider {
             return stub();
         }
     }
+
+    private String sign(String message, String secret) throws Exception {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+        byte[] sig = mac.doFinal(message.getBytes(StandardCharsets.UTF_8));
+        StringBuilder hex = new StringBuilder();
+        for (byte b : sig) hex.append(String.format("%02x", b));
+        return hex.toString();
+    }
+
+    private TradingInfoDTO stub() {
+        return new TradingInfoDTO(List.of(
+                new TradingNetworkInfoDTO("N/A", -1.0, false, false)
+        ));
+    }
+
 }
