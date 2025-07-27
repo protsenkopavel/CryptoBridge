@@ -218,9 +218,12 @@ public class PriceSpreadService {
     }
 
     private CurrencyPair parseCurrencyPair(String pairStr) {
-        String normalized = pairStr.replace('/', '_');
+        String cleanPairStr = pairStr
+                .replaceAll("^[^A-Z0-9]+", "")
+                .replaceAll("[^A-Z0-9/_]", "");
+        String normalized = cleanPairStr.replace('/', '_');
         String[] parts = normalized.split("_");
-        if (parts.length != 2) {
+        if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
             throw new IllegalArgumentException("Invalid currency pair format: " + pairStr);
         }
         return new CurrencyPair(parts[0], parts[1]);
