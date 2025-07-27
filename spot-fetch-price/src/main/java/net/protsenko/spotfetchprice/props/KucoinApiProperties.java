@@ -9,12 +9,9 @@ import org.springframework.context.annotation.Configuration;
 @ConfigurationProperties(prefix = "exchanger.properties.kucoin")
 public class KucoinApiProperties {
 
-    public static String API_URL = "https://api.kucoin.com/api/v3/currencies/";
-
+    public static String baseUrl = "https://api.kucoin.com/api/v3/currencies/";
     private String key;
-
     private String secret;
-
     private String passphrase;
 
 }
