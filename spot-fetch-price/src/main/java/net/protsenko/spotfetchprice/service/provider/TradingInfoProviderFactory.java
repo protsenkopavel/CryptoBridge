@@ -17,7 +17,7 @@ public class TradingInfoProviderFactory {
     private final MEXCTradingInfoProvider mexcTradingInfoProvider;
     private final BitgetTradingInfoProvider bitgetTradingInfoProvider;
     private final BingxTradingInfoProvider bingxTradingInfoProvider;
-    private final OkxTradingInfoProvider okxTradingInfoProvider;
+    private final OKXTradingInfoProvider okxTradingInfoProvider;
 
     private final Map<ExchangeType, TradingInfoProvider> providers = new EnumMap<>(ExchangeType.class);
 
