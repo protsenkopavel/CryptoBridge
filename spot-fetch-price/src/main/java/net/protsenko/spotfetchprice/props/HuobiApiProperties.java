@@ -17,6 +17,8 @@ public class HuobiApiProperties {
     private String tickersPath = "/market/tickers";
     private String symbolsPath = "/v1/common/symbols";
     private String userAgent = "Mozilla/5.0";
+    private String spotConfigPath = "/v2/reference/currencies";
+    private String redisKey = "redis-key: tradingInfo:huobi:all";
     private int maxInMemorySize = 20 * 1024 * 1024;
     private int responseTimeoutSeconds = 60;
 

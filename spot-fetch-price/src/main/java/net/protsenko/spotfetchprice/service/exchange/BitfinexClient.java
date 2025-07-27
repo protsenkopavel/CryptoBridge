@@ -12,9 +12,11 @@ import org.knowm.xchange.currency.CurrencyPair;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+
+import static net.protsenko.spotfetchprice.util.TikersUtils.partition;
+
 
 @Slf4j
 public class BitfinexClient extends BaseXChangeClient {
@@ -31,25 +33,34 @@ public class BitfinexClient extends BaseXChangeClient {
                 bitfinexExchange, bitfinexExchange.getResilienceRegistries()
         );
 
-        List<CurrencyPair> pairsToQuery = instruments == null ?
-                getCurrencyPairs() :
-                instruments;
+        List<CurrencyPair> pairsToQuery = instruments == null ? getCurrencyPairs() : instruments;
 
-        try {
-            BitfinexTicker[] bitfinexTickers = rawService.getBitfinexTickers(pairsToQuery);
-            return Arrays.stream(bitfinexTickers)
-                    .filter(ticker -> !ticker.getSymbol().startsWith("f"))
-                    .map(TickerMapper::fromBitfinexV2Ticker)
-                    .filter(Objects::nonNull)
-                    .toList();
-        } catch (IOException e) {
-            log.error("Error fetching tickers from Bitfinex: {}", e.getMessage(), e);
-            return Collections.emptyList();
+        int batchSize = 70;
+        List<TickerDTO> result = new java.util.ArrayList<>();
+        for (List<CurrencyPair> batch : partition(pairsToQuery, batchSize)) {
+            try {
+                BitfinexTicker[] bitfinexTickers = rawService.getBitfinexTickers(batch);
+                List<TickerDTO> batchTickers = Arrays.stream(bitfinexTickers)
+                        .filter(ticker -> !ticker.getSymbol().startsWith("f"))
+                        .map(TickerMapper::fromBitfinexV2Ticker)
+                        .filter(Objects::nonNull)
+                        .toList();
+                result.addAll(batchTickers);
+            } catch (IOException e) {
+                log.error("Error fetching tickers batch from Bitfinex: {}", e.getMessage(), e);
+            }
+            try {
+                Thread.sleep(1200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
+        return result;
     }
 
     @Override
     public ExchangeType getExchangeType() {
         return ExchangeType.BITFINEX;
     }
+
 }

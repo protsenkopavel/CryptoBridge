@@ -131,23 +131,43 @@ public class ExchangeService {
     }
 
     private ExchangeClient getOrCreateExchangeClient(ExchangeType exchangeType) throws IOException {
-        ExchangeClientHolder holder = exchangeClients.computeIfAbsent(exchangeType, et -> {
-            try {
-                return new ExchangeClientHolder(exchangeClientFactory.createClient(et));
-            } catch (Exception e) {
-                log.error("Ошибка инициализации {}: {}", et, e.getMessage());
-                return new ExchangeClientHolder(e);
-            }
-        });
+        ExchangeClientHolder holder = exchangeClients.get(exchangeType);
 
-        if (holder.isDisabled()) {
-            throw new IOException("Не удалось инициализировать " + exchangeType);
+        if (holder != null && !holder.isDisabled()) {
+            try {
+                return holder.getClient();
+            } catch (Exception e) {
+                throw new IOException("Клиент " + exchangeType + " недоступен", e);
+            }
         }
 
-        try {
-            return holder.getClient();
-        } catch (Exception e) {
-            throw new IOException("Клиент " + exchangeType + " недоступен", e);
+        if (holder != null && holder.isDisabled() && !holder.canRetry()) {
+            throw new IOException("Не удалось инициализировать " + exchangeType + " (cooldown)");
+        }
+
+        synchronized (exchangeClients) {
+            holder = exchangeClients.get(exchangeType);
+            if (holder != null && !holder.isDisabled()) {
+                try {
+                    return holder.getClient();
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            if (holder != null && holder.isDisabled() && !holder.canRetry()) {
+                throw new IOException("Не удалось инициализировать " + exchangeType + " (cooldown)");
+            }
+            try {
+                ExchangeClient newClient = exchangeClientFactory.createClient(exchangeType);
+                ExchangeClientHolder newHolder = new ExchangeClientHolder(newClient);
+                exchangeClients.put(exchangeType, newHolder);
+                return newClient;
+            } catch (Exception e) {
+                ExchangeClientHolder errorHolder = new ExchangeClientHolder(e);
+                exchangeClients.put(exchangeType, errorHolder);
+                log.error("Ошибка инициализации {}: {}", exchangeType, e.getMessage());
+                throw new IOException("Не удалось инициализировать " + exchangeType, e);
+            }
         }
     }
 

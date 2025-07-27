@@ -19,6 +19,7 @@ public class TradingInfoProviderFactory {
     private final BingXTradingInfoProvider bingxTradingInfoProvider;
     private final OKXTradingInfoProvider okxTradingInfoProvider;
     private final CoinExTradingInfoProvider coinExTradingInfoProvider;
+    private final HuobiTradingInfoProvider huobiTradingInfoProvider;
 
     private final Map<ExchangeType, TradingInfoProvider> providers = new EnumMap<>(ExchangeType.class);
 
@@ -32,6 +33,7 @@ public class TradingInfoProviderFactory {
         providers.put(ExchangeType.BINGX, bingxTradingInfoProvider);
         providers.put(ExchangeType.OKX, okxTradingInfoProvider);
         providers.put(ExchangeType.COINEX, coinExTradingInfoProvider);
+        providers.put(ExchangeType.HUOBI, huobiTradingInfoProvider);
 
 
         for (ExchangeType type : ExchangeType.values()) {
