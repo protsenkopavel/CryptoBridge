@@ -18,6 +18,8 @@ public class BingXApiProperties {
     private String secret;
     private String baseUrl = "https://open-api.bingx.com";
     private String spotConfigPath = "/openApi/wallets/v1/capital/config/getall";
+    private String tickersPath = "/openApi/spot/v1/ticker/24hr";
+    private String symbolsPath = "/openApi/spot/v1/common/symbols";
     private String userAgent = "Mozilla/5.0";
     private int maxInMemorySize = 20 * 1024 * 1024;
     private int responseTimeoutSeconds = 60;

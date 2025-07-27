@@ -8,17 +8,17 @@ import org.knowm.xchange.bitget.BitgetExchange;
 import org.knowm.xchange.bybit.BybitExchange;
 import org.knowm.xchange.coinex.CoinexExchange;
 import org.knowm.xchange.gateio.GateioExchange;
+import org.knowm.xchange.huobi.HuobiExchange;
 import org.knowm.xchange.kucoin.KucoinExchange;
 
 public enum ExchangeType {
     BYBIT(BybitExchange.class),
-    BINANCE(BinanceExchange.class),
     MEXC(null),
     GATEIO(GateioExchange.class),
     KUCOIN(KucoinExchange.class),
     BITGET(BitgetExchange.class),
     COINEX(CoinexExchange.class),
-    //    HUOBI(HuobiExchange.class),
+    HUOBI(HuobiExchange.class),
     BITFINEX(BitfinexExchange.class),
     OKX(null),
     BINGX(null);

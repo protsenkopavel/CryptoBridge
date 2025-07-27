@@ -16,10 +16,14 @@ public class MEXCApiProperties {
     private final int maxInMemorySize = 20 * 1024 * 1024;
     private final int responseTimeoutSeconds = 60;
     private final String redisKeyAll = "tradingInfo:mexc:all";
+    private final String[] quotes = {"USDT", "USDC"};
     private String key;
     private String secret;
     private String baseUrl = "https://api.mexc.com";
     private String spotConfigPath = "/api/v3/capital/config/getall";
+    private String tickersPath = "/api/v3/ticker/24hr";
+    private String exchangeInfoPath = "/api/v3/exchangeInfo";
+    private String userAgent = "Mozilla/5.0";
 
     public ReactorClientHttpConnector createConnector() {
         return new ReactorClientHttpConnector(

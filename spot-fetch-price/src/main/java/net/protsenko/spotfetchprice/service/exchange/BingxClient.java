@@ -2,85 +2,125 @@ package net.protsenko.spotfetchprice.service.exchange;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.protsenko.spotfetchprice.dto.TickerDTO;
+import net.protsenko.spotfetchprice.props.BingXApiProperties;
 import net.protsenko.spotfetchprice.service.ExchangeType;
 import org.knowm.xchange.currency.CurrencyPair;
+import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
+import org.springframework.web.reactive.function.client.WebClient;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 @Slf4j
-@RequiredArgsConstructor
+@Component
 public class BingxClient implements ExchangeClient {
 
-    private final HttpClient httpClient;
+    private final WebClient webClient;
     private final ObjectMapper objectMapper;
+    private final BingXApiProperties bingxApiProperties;
 
-    @Override
-    public List<TickerDTO> getTickers(List<CurrencyPair> pairsFilter) throws IOException {
-        List<TickerDTO> result = new ArrayList<>();
-        try {
-            long timestamp = System.currentTimeMillis();
-            String url = "https://open-api.bingx.com/openApi/spot/v1/ticker/24hr?timestamp=" + timestamp;
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            JsonNode root = objectMapper.readTree(response.body());
-
-            JsonNode data = root.get("data");
-            if (data != null && data.isArray()) {
-                for (JsonNode ticker : data) {
-                    String symbol = ticker.get("symbol").asText();
-                    CurrencyPair pair = parseBingxSymbol(symbol);
-
-                    if (pairsFilter == null || pairsFilter.isEmpty() || pairsFilter.contains(pair)) {
-                        double last = getDoubleSafe(ticker, "lastPrice");
-                        double bid = getDoubleSafe(ticker, "bidPrice");
-                        double ask = getDoubleSafe(ticker, "askPrice");
-                        double volume = getDoubleSafe(ticker, "volume");
-
-                        result.add(new TickerDTO(
-                                pair.getBase().getCurrencyCode(),
-                                pair.getCounter().getCurrencyCode(),
-                                last, bid, ask, volume, 0
-                        ));
-                    }
-                }
-            }
-        } catch (Exception e) {
-            throw new IOException("Ошибка загрузки тикеров BingX", e);
-        }
-        return result;
+    public BingxClient(BingXApiProperties bingxApiProperties, ObjectMapper objectMapper) {
+        this.bingxApiProperties = bingxApiProperties;
+        this.objectMapper = objectMapper;
+        this.webClient = WebClient.builder()
+                .baseUrl(bingxApiProperties.getBaseUrl())
+                .exchangeStrategies(ExchangeStrategies.builder()
+                        .codecs(configurer -> configurer
+                                .defaultCodecs()
+                                .maxInMemorySize(bingxApiProperties.getMaxInMemorySize()))
+                        .build())
+                .clientConnector(bingxApiProperties.createConnector())
+                .build();
     }
 
     @Override
-    public List<CurrencyPair> getCurrencyPairs() throws IOException {
-        List<CurrencyPair> result = new ArrayList<>();
+    public List<TickerDTO> getTickers(List<CurrencyPair> pairsFilter) {
         try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://open-api.bingx.com/openApi/spot/v1/common/symbols"))
-                    .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            JsonNode root = objectMapper.readTree(response.body());
+            String url = bingxApiProperties.getTickersPath() + "?timestamp=" + System.currentTimeMillis();
+
+            String response = webClient.get()
+                    .uri(url)
+                    .header("User-Agent", bingxApiProperties.getUserAgent())
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .timeout(Duration.ofSeconds(60))
+                    .onErrorReturn("")
+                    .block();
+
+            if (response == null || response.isEmpty()) return Collections.emptyList();
+
+            JsonNode root = objectMapper.readTree(response);
             JsonNode data = root.get("data");
-            if (data != null && data.isArray()) {
-                for (JsonNode symbolNode : data) {
-                    String symbol = symbolNode.get("symbol").asText();
-                    result.add(parseBingxSymbol(symbol));
+            if (data == null || !data.isArray() || data.isEmpty()) {
+                log.warn("BingX: пустой или некорректный ответ (data=null)");
+                return Collections.emptyList();
+            }
+
+            List<TickerDTO> result = new ArrayList<>();
+            for (JsonNode ticker : data) {
+                String symbol = ticker.path("symbol").asText("");
+                CurrencyPair pair = parseBingxSymbolSafe(symbol);
+                if (pair == null) continue;
+
+                if (pairsFilter == null || pairsFilter.isEmpty() || pairsFilter.contains(pair)) {
+                    double last = getDoubleSafe(ticker, "lastPrice");
+                    double bid = getDoubleSafe(ticker, "bidPrice");
+                    double ask = getDoubleSafe(ticker, "askPrice");
+                    double volume = getDoubleSafe(ticker, "volume");
+
+                    result.add(new TickerDTO(
+                            pair.getBase().getCurrencyCode(),
+                            pair.getCounter().getCurrencyCode(),
+                            last, bid, ask, volume, 0
+                    ));
                 }
             }
+            return result;
         } catch (Exception e) {
-            throw new IOException("Ошибка загрузки валютных пар BingX", e);
+            log.error("Ошибка загрузки тикеров BingX: {}", e.getMessage(), e);
+            return Collections.emptyList();
         }
-        return result;
+    }
+
+    @Override
+    public List<CurrencyPair> getCurrencyPairs() {
+        try {
+            String url = bingxApiProperties.getSymbolsPath();
+            String response = webClient.get()
+                    .uri(url)
+                    .header("User-Agent", bingxApiProperties.getUserAgent())
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .timeout(Duration.ofSeconds(30))
+                    .onErrorReturn("")
+                    .block();
+
+            if (response == null || response.isEmpty()) return Collections.emptyList();
+
+            JsonNode root = objectMapper.readTree(response);
+            JsonNode data = root.get("data");
+            JsonNode symbols = data != null ? data.get("symbols") : null;
+            if (symbols == null || !symbols.isArray() || symbols.isEmpty()) {
+                log.warn("BingX: пустой или некорректный symbols (symbols=null)");
+                return Collections.emptyList();
+            }
+
+            List<CurrencyPair> result = new ArrayList<>();
+            for (JsonNode symbolNode : symbols) {
+                String symbol = symbolNode.path("symbol").asText("");
+                CurrencyPair pair = parseBingxSymbolSafe(symbol);
+                if (pair != null) result.add(pair);
+            }
+            return result;
+        } catch (Exception e) {
+            log.error("Ошибка загрузки валютных пар BingX: {}", e.getMessage(), e);
+            return Collections.emptyList();
+        }
     }
 
     @Override
@@ -88,22 +128,22 @@ public class BingxClient implements ExchangeClient {
         return ExchangeType.BINGX;
     }
 
-    private CurrencyPair parseBingxSymbol(String symbol) {
+    private CurrencyPair parseBingxSymbolSafe(String symbol) {
+        if (symbol == null || symbol.isEmpty()) return null;
         String[] parts = symbol.split("-");
         if (parts.length == 2) {
             return new CurrencyPair(parts[0], parts[1]);
         }
-        throw new IllegalArgumentException("Некорректный symbol BingX: " + symbol);
+        log.warn("BingX: некорректный symbol: {}", symbol);
+        return null;
     }
 
     private double getDoubleSafe(JsonNode node, String field) {
-        JsonNode valueNode = node.get(field);
-        if (valueNode != null && !valueNode.isNull()) {
-            try {
-                return valueNode.asDouble();
-            } catch (Exception ignore) {
-            }
+        try {
+            return node.path(field).asDouble(0.0);
+        } catch (Exception e) {
+            log.warn("BingX: не удалось распарсить поле '{}' как double: {}", field, e.getMessage());
+            return 0.0;
         }
-        return 0.0;
     }
 }
