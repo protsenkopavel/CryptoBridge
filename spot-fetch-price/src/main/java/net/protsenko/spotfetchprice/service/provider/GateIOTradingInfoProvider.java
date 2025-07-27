@@ -17,7 +17,7 @@ public class GateIOTradingInfoProvider implements TradingInfoProvider {
 
     private TradingInfoDTO stub() {
         return new TradingInfoDTO(List.of(
-                new TradingNetworkInfoDTO("N/A", -1.0, false, false)
+                new TradingNetworkInfoDTO("", -1.0, false, false)
         ));
     }
 

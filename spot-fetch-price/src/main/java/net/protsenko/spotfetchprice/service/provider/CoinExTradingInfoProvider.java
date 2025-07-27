@@ -3,7 +3,7 @@ package net.protsenko.spotfetchprice.service.provider;
 import lombok.extern.slf4j.Slf4j;
 import net.protsenko.spotfetchprice.dto.TradingInfoDTO;
 import net.protsenko.spotfetchprice.dto.TradingNetworkInfoDTO;
-import net.protsenko.spotfetchprice.props.BingXApiProperties;
+import net.protsenko.spotfetchprice.props.CoinEXApiProperties;
 import net.protsenko.spotfetchprice.service.ExchangeType;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -17,33 +17,30 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 
-import static net.protsenko.spotfetchprice.util.BingXApiSignUtils.generateHmac256;
-import static net.protsenko.spotfetchprice.util.BingXApiSignUtils.getMessageToDigest;
 import static net.protsenko.spotfetchprice.util.NetworkNormalizer.normalize;
 
 @Slf4j
 @Component
-public class BingxTradingInfoProvider implements TradingInfoProvider {
+public class CoinExTradingInfoProvider implements TradingInfoProvider {
 
-    private final BingXApiProperties bingxApiProperties;
+    private final CoinEXApiProperties apiProperties;
     private final RedisTemplate<String, String> redisTemplate;
     private final WebClient webClient;
 
-    public BingxTradingInfoProvider(BingXApiProperties bingxApiProperties, RedisTemplate<String, String> redisTemplate) {
-        this.bingxApiProperties = bingxApiProperties;
+    public CoinExTradingInfoProvider(CoinEXApiProperties apiProperties, RedisTemplate<String, String> redisTemplate) {
+        this.apiProperties = apiProperties;
         this.redisTemplate = redisTemplate;
         this.webClient = WebClient.builder()
-                .baseUrl(bingxApiProperties.getBaseUrl())
+                .baseUrl(apiProperties.getBaseUrl())
                 .exchangeStrategies(ExchangeStrategies.builder()
                         .codecs(configurer -> configurer
                                 .defaultCodecs()
-                                .maxInMemorySize(bingxApiProperties.getMaxInMemorySize())
+                                .maxInMemorySize(apiProperties.getMaxInMemorySize())
                         )
                         .build())
-                .clientConnector(bingxApiProperties.createConnector())
+                .clientConnector(apiProperties.createConnector())
                 .build();
     }
 
@@ -51,70 +48,55 @@ public class BingxTradingInfoProvider implements TradingInfoProvider {
     public TradingInfoDTO getTradingInfo(ExchangeType exchange, CurrencyPair pair) {
         String coin = pair.getBase().getCurrencyCode().toUpperCase();
 
-        String cachedJson = getCachedJson();
-        if (cachedJson == null) {
-            cachedJson = fetchAndCacheJson(exchange);
-            if (cachedJson == null) return stub();
+        String allCoinsJson = getAllCoinsFromCache();
+        if (allCoinsJson == null) {
+            allCoinsJson = fetchAndCacheAllCoinsJson(exchange);
+            if (allCoinsJson == null) return stub();
         }
 
-        return parseCoinInfoFromJson(cachedJson, coin);
+        return parseTradingInfoForCoin(allCoinsJson, coin);
     }
 
-    private String getCachedJson() {
-        return redisTemplate.opsForValue().get(bingxApiProperties.getRedis_key());
+    private String getAllCoinsFromCache() {
+        return redisTemplate.opsForValue().get(apiProperties.getRedisKeyAll());
     }
 
-    private String fetchAndCacheJson(ExchangeType exchange) {
+    private String fetchAndCacheAllCoinsJson(ExchangeType exchange) {
         try {
-            String response = fetchAllCoinsFromApi(exchange);
-            if (response != null && !response.isEmpty()) {
-                redisTemplate.opsForValue().set(
-                        bingxApiProperties.getRedis_key(), response, 24, TimeUnit.HOURS
-                );
-                return response;
+            String json = fetchAllCoinsFromApi(exchange);
+            if (json != null && !json.isEmpty()) {
+                redisTemplate.opsForValue().set(apiProperties.getRedisKeyAll(), json, 24, TimeUnit.HOURS);
+                return json;
             }
         } catch (Exception ex) {
-            log.error("Ошибка получения данных BingX: ", ex);
+            log.error("Ошибка получения данных CoinEx: ", ex);
         }
         return null;
     }
 
     private String fetchAllCoinsFromApi(ExchangeType exchange) {
-        String timestamp = String.valueOf(System.currentTimeMillis());
-        TreeMap<String, String> parameters = new TreeMap<>();
-        parameters.put("timestamp", timestamp);
-
-        String valueToDigest = getMessageToDigest(parameters);
-        String messageDigest = generateHmac256(valueToDigest, bingxApiProperties.getSecret());
-        String parametersString = valueToDigest + "&signature=" + messageDigest;
-
         try {
             return webClient.get()
-                    .uri(uriBuilder -> uriBuilder
-                            .path(bingxApiProperties.getSpotConfigPath())
-                            .query(parametersString)
-                            .build())
-                    .header("X-BX-APIKEY", bingxApiProperties.getKey())
-                    .header("User-Agent", bingxApiProperties.getUserAgent())
+                    .uri(apiProperties.getSpotConfigPath())
                     .retrieve()
                     .bodyToMono(String.class)
-                    .timeout(Duration.ofSeconds(60))
+                    .timeout(Duration.ofSeconds(apiProperties.getResponseTimeoutSeconds()))
                     .onErrorResume(e -> {
                         log.error("Ошибка при вызове {} API: {}", exchange.name(), e.getMessage(), e);
                         return Mono.just("");
                     })
                     .block();
         } catch (Exception e) {
-            log.error("Ошибка при запросе к BingX API: ", e);
+            log.error("Ошибка при запросе к CoinEx API: ", e);
             return null;
         }
     }
 
-    private TradingInfoDTO parseCoinInfoFromJson(String json, String coin) {
+    private TradingInfoDTO parseTradingInfoForCoin(String json, String coin) {
         try {
             JSONObject root = new JSONObject(json);
-            if (!"0".equals(root.optString("code"))) {
-                log.warn("BingX error: {}", root.optString("msg"));
+            if (root.optInt("code") != 0) {
+                log.warn("CoinEx error: {}", root.optString("message"));
                 return stub();
             }
             JSONArray dataArr = root.optJSONArray("data");
@@ -124,8 +106,8 @@ public class BingxTradingInfoProvider implements TradingInfoProvider {
             if (coinObj == null) return stub();
 
             return buildTradingInfoFromJson(coinObj);
-        } catch (Exception e) {
-            log.error("Ошибка парсинга JSON BingX: ", e);
+        } catch (Exception ex) {
+            log.error("Ошибка парсинга CoinEx: ", ex);
             return stub();
         }
     }
@@ -133,7 +115,8 @@ public class BingxTradingInfoProvider implements TradingInfoProvider {
     private JSONObject findCoinObject(JSONArray dataArr, String coin) {
         for (int i = 0; i < dataArr.length(); i++) {
             JSONObject obj = dataArr.getJSONObject(i);
-            if (coin.equalsIgnoreCase(obj.optString("coin"))) {
+            JSONObject asset = obj.optJSONObject("asset");
+            if (asset != null && coin.equalsIgnoreCase(asset.optString("ccy"))) {
                 return obj;
             }
         }
@@ -141,20 +124,20 @@ public class BingxTradingInfoProvider implements TradingInfoProvider {
     }
 
     private TradingInfoDTO buildTradingInfoFromJson(JSONObject coinObj) {
-        JSONArray chains = coinObj.optJSONArray("networkList");
+        JSONArray chains = coinObj.optJSONArray("chains");
         if (chains == null || chains.isEmpty()) return stub();
 
         List<TradingNetworkInfoDTO> networks = new ArrayList<>();
         for (int i = 0; i < chains.length(); i++) {
             JSONObject chain = chains.getJSONObject(i);
-            String networkRaw = chain.optString("network", "");
+            String networkRaw = chain.optString("chain", "");
             String network = normalize(networkRaw);
-            boolean depositEnable = chain.optBoolean("depositEnable", false);
-            boolean withdrawEnable = chain.optBoolean("withdrawEnable", false);
+            boolean depositEnable = chain.optBoolean("deposit_enabled", false);
+            boolean withdrawEnable = chain.optBoolean("withdraw_enabled", false);
             double withdrawFee = -1;
-            if (chain.has("withdrawFee")) {
+            if (chain.has("withdrawal_fee")) {
                 try {
-                    withdrawFee = Double.parseDouble(chain.optString("withdrawFee", "-1"));
+                    withdrawFee = Double.parseDouble(chain.optString("withdrawal_fee", "-1"));
                 } catch (Exception ignore) {
                 }
             }
@@ -168,4 +151,5 @@ public class BingxTradingInfoProvider implements TradingInfoProvider {
                 new TradingNetworkInfoDTO("", -1.0, false, false)
         ));
     }
+
 }
