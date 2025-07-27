@@ -6,6 +6,7 @@ import net.protsenko.spotfetchprice.dto.ExchangeTickersDTO;
 import net.protsenko.spotfetchprice.dto.TickerDTO;
 import net.protsenko.spotfetchprice.service.exchange.ExchangeClient;
 import net.protsenko.spotfetchprice.service.exchange.ExchangeClientFactory;
+import net.protsenko.spotfetchprice.service.exchange.ExchangeClientHolder;
 import org.knowm.xchange.currency.CurrencyPair;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -28,7 +29,7 @@ public class ExchangeService {
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
     private final ValueOperations<String, ExchangeTickersDTO> valueOps;
     private final ExchangeClientFactory exchangeClientFactory;
-    private final Map<ExchangeType, ExchangeClient> exchangeClients = new ConcurrentHashMap<>();
+    private final Map<ExchangeType, ExchangeClientHolder> exchangeClients = new ConcurrentHashMap<>();
 
     public ExchangeService(RedisTemplate<String, ExchangeTickersDTO> redisTemplate, ExchangeClientFactory exchangeClientFactory) {
         this.valueOps = redisTemplate.opsForValue();
@@ -130,14 +131,24 @@ public class ExchangeService {
     }
 
     private ExchangeClient getOrCreateExchangeClient(ExchangeType exchangeType) throws IOException {
-        return exchangeClients.computeIfAbsent(exchangeType, et -> {
+        ExchangeClientHolder holder = exchangeClients.computeIfAbsent(exchangeType, et -> {
             try {
-                return exchangeClientFactory.createClient(et);
-            } catch (IOException e) {
-                log.error("Failed to create exchange client for {}: {}", et, e.getMessage());
-                throw new RuntimeException(e);
+                return new ExchangeClientHolder(exchangeClientFactory.createClient(et));
+            } catch (Exception e) {
+                log.error("Ошибка инициализации {}: {}", et, e.getMessage());
+                return new ExchangeClientHolder(e);
             }
         });
+
+        if (holder.isDisabled()) {
+            throw new IOException("Не удалось инициализировать " + exchangeType);
+        }
+
+        try {
+            return holder.getClient();
+        } catch (Exception e) {
+            throw new IOException("Клиент " + exchangeType + " недоступен", e);
+        }
     }
 
     private String generateCacheKey(ExchangeType exchangeType, List<CurrencyPair> instruments) {
