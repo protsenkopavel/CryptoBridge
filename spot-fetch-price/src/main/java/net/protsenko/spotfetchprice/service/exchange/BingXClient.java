@@ -18,13 +18,13 @@ import java.util.List;
 
 @Slf4j
 @Component
-public class BingxClient implements ExchangeClient {
+public class BingXClient implements ExchangeClient {
 
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
     private final BingXApiProperties bingxApiProperties;
 
-    public BingxClient(BingXApiProperties bingxApiProperties, ObjectMapper objectMapper) {
+    public BingXClient(BingXApiProperties bingxApiProperties, ObjectMapper objectMapper) {
         this.bingxApiProperties = bingxApiProperties;
         this.objectMapper = objectMapper;
         this.webClient = WebClient.builder()
@@ -134,7 +134,6 @@ public class BingxClient implements ExchangeClient {
         if (parts.length == 2) {
             return new CurrencyPair(parts[0], parts[1]);
         }
-        log.warn("BingX: некорректный symbol: {}", symbol);
         return null;
     }
 

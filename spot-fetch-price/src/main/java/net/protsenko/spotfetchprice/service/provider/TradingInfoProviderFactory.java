@@ -16,7 +16,7 @@ public class TradingInfoProviderFactory {
     private final GateIOTradingInfoProvider gateIOTradingInfoProvider;
     private final MEXCTradingInfoProvider mexcTradingInfoProvider;
     private final BitgetTradingInfoProvider bitgetTradingInfoProvider;
-    private final BingxTradingInfoProvider bingxTradingInfoProvider;
+    private final BingXTradingInfoProvider bingxTradingInfoProvider;
     private final OKXTradingInfoProvider okxTradingInfoProvider;
     private final CoinExTradingInfoProvider coinExTradingInfoProvider;
 

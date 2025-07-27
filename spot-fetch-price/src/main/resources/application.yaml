@@ -47,6 +47,7 @@ logging:
     org.springframework.web: INFO
     org.springframework.web.reactive.function.client: WARN
     reactor.netty.http.client: WARN
+    org.hibernate: warn
 
 exchanger:
   properties:

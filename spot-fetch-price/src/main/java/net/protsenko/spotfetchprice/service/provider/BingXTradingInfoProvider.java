@@ -26,13 +26,13 @@ import static net.protsenko.spotfetchprice.util.NetworkNormalizer.normalize;
 
 @Slf4j
 @Component
-public class BingxTradingInfoProvider implements TradingInfoProvider {
+public class BingXTradingInfoProvider implements TradingInfoProvider {
 
     private final BingXApiProperties bingxApiProperties;
     private final RedisTemplate<String, String> redisTemplate;
     private final WebClient webClient;
 
-    public BingxTradingInfoProvider(BingXApiProperties bingxApiProperties, RedisTemplate<String, String> redisTemplate) {
+    public BingXTradingInfoProvider(BingXApiProperties bingxApiProperties, RedisTemplate<String, String> redisTemplate) {
         this.bingxApiProperties = bingxApiProperties;
         this.redisTemplate = redisTemplate;
         this.webClient = WebClient.builder()

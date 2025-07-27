@@ -3,12 +3,12 @@ package net.protsenko.spotfetchprice.service.exchange;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import net.protsenko.spotfetchprice.props.BingXApiProperties;
+import net.protsenko.spotfetchprice.props.HuobiApiProperties;
 import net.protsenko.spotfetchprice.props.MEXCApiProperties;
 import net.protsenko.spotfetchprice.props.OKXApiProperties;
 import net.protsenko.spotfetchprice.service.ExchangeType;
 import org.knowm.xchange.Exchange;
 import org.springframework.stereotype.Component;
-import org.springframework.web.reactive.function.client.WebClient;
 
 import java.io.IOException;
 
@@ -16,31 +16,32 @@ import java.io.IOException;
 @Component
 public class ExchangeClientFactory {
 
-    private final WebClient webClient;
     private final ObjectMapper objectMapper;
     private final BingXApiProperties bingXApiProperties;
     private final MEXCApiProperties mexcApiProperties;
     private final OKXApiProperties okxApiProperties;
+    private final HuobiApiProperties huobiApiProperties;
 
     public ExchangeClientFactory(
-            WebClient.Builder webClientBuilder,
             ObjectMapper objectMapper,
             BingXApiProperties bingXApiProperties,
             MEXCApiProperties mexcApiProperties,
-            OKXApiProperties okxApiProperties
+            OKXApiProperties okxApiProperties,
+            HuobiApiProperties huobiApiProperties
     ) {
-        this.webClient = webClientBuilder.build();
         this.objectMapper = objectMapper;
         this.bingXApiProperties = bingXApiProperties;
         this.mexcApiProperties = mexcApiProperties;
         this.okxApiProperties = okxApiProperties;
+        this.huobiApiProperties = huobiApiProperties;
     }
 
     public ExchangeClient createClient(ExchangeType exchangeType) throws IOException {
         return switch (exchangeType) {
             case MEXC -> new MEXCClient(mexcApiProperties, objectMapper);
             case OKX -> new OKXClient(okxApiProperties, objectMapper);
-            case BINGX -> new BingxClient(bingXApiProperties, objectMapper);
+            case BINGX -> new BingXClient(bingXApiProperties, objectMapper);
+            case HUOBI -> new HuobiClient(huobiApiProperties, objectMapper);
             case KUCOIN -> {
                 Exchange exchange = exchangeType.createExchange();
                 try {
