@@ -1,6 +1,5 @@
 package net.protsenko.spotfetchprice.service.provider;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.protsenko.spotfetchprice.dto.TradingInfoDTO;
 import net.protsenko.spotfetchprice.dto.TradingNetworkInfoDTO;
@@ -156,7 +155,8 @@ public class BingxTradingInfoProvider implements TradingInfoProvider {
             if (chain.has("withdrawFee")) {
                 try {
                     withdrawFee = Double.parseDouble(chain.optString("withdrawFee", "-1"));
-                } catch (Exception ignore) {}
+                } catch (Exception ignore) {
+                }
             }
             networks.add(new TradingNetworkInfoDTO(network, withdrawFee, depositEnable, withdrawEnable));
         }
