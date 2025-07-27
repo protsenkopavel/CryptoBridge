@@ -1,0 +1,3 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/2025_07_27_init_subscriber_table.xml

@@ -1,13 +1,14 @@
-package net.protsenko.cryptobridge.telegramnotifier.service;
+package net.protsenko.cryptobridge.telegramnotifier.event.listener;
 
 import lombok.RequiredArgsConstructor;
 import net.protsenko.cryptobridge.telegramnotifier.dto.ArbitrageOpportunityFoundEvent;
+import net.protsenko.cryptobridge.telegramnotifier.service.TelegramBotService;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
-public class ArbitrageNotificationService {
+public class ArbitrageNotificationListener {
 
     private final TelegramBotService telegramBotService;
 
