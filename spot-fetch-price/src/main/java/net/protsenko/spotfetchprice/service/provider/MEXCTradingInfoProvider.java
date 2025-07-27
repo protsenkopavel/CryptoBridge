@@ -1,6 +1,5 @@
 package net.protsenko.spotfetchprice.service.provider;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.protsenko.spotfetchprice.dto.TradingInfoDTO;
 import net.protsenko.spotfetchprice.dto.TradingNetworkInfoDTO;
@@ -9,138 +8,151 @@ import net.protsenko.spotfetchprice.service.ExchangeType;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.knowm.xchange.currency.CurrencyPair;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
-import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
-import reactor.netty.http.client.HttpClient;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import static net.protsenko.spotfetchprice.util.MEXCApiSignUtils.hmacSHA256Hex;
 import static net.protsenko.spotfetchprice.util.NetworkNormalizer.normalize;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class MEXCTradingInfoProvider implements TradingInfoProvider {
 
     private final MEXCApiProperties apiProperties;
+    private final RedisTemplate<String, String> redisTemplate;
+    private final WebClient webClient;
 
-    @Qualifier("tradingInfoRedisTemplate")
-    private final RedisTemplate<String, TradingInfoDTO> redisTemplate;
-
-    private final WebClient webClient = WebClient.builder()
-            .baseUrl("https://api.mexc.com")
-            .exchangeStrategies(ExchangeStrategies.builder()
-                    .codecs(configurer -> configurer
-                            .defaultCodecs()
-                            .maxInMemorySize(20 * 1024 * 1024)
-                    )
-                    .build())
-            .clientConnector(new ReactorClientHttpConnector(HttpClient.create()
-                    .responseTimeout(Duration.ofSeconds(60))))
-            .build();
+    public MEXCTradingInfoProvider(MEXCApiProperties apiProperties, RedisTemplate<String, String> redisTemplate) {
+        this.apiProperties = apiProperties;
+        this.redisTemplate = redisTemplate;
+        this.webClient = WebClient.builder()
+                .baseUrl(apiProperties.getBaseUrl())
+                .exchangeStrategies(ExchangeStrategies.builder()
+                        .codecs(configurer -> configurer
+                                .defaultCodecs()
+                                .maxInMemorySize(apiProperties.getMaxInMemorySize())
+                        )
+                        .build())
+                .clientConnector(apiProperties.createConnector())
+                .build();
+    }
 
     @Override
     public TradingInfoDTO getTradingInfo(ExchangeType exchange, CurrencyPair pair) {
         String coin = pair.getBase().getCurrencyCode().toUpperCase();
-        String redisKey = "tradingInfo:mexc:" + coin;
-        ValueOperations<String, TradingInfoDTO> ops = redisTemplate.opsForValue();
-        TradingInfoDTO cached = ops.get(redisKey);
-        if (cached != null) return cached;
+
+        String allCoinsJson = getAllCoinsFromCache();
+        if (allCoinsJson == null) {
+            allCoinsJson = fetchAndCacheAllCoinsJson(exchange);
+            if (allCoinsJson == null) return stub();
+        }
+
+        return parseTradingInfoForCoin(allCoinsJson, coin);
+    }
+
+    private String getAllCoinsFromCache() {
+        return redisTemplate.opsForValue().get(apiProperties.getRedisKeyAll());
+    }
+
+    private String fetchAndCacheAllCoinsJson(ExchangeType exchange) {
+        try {
+            String json = fetchAllCoinsFromApi(exchange);
+            if (json != null && !json.isEmpty()) {
+                redisTemplate.opsForValue().set(apiProperties.getRedisKeyAll(), json, 24, TimeUnit.HOURS);
+                return json;
+            }
+        } catch (Exception ex) {
+            log.error("Ошибка получения данных MEXC: ", ex);
+        }
+        return null;
+    }
+
+    private String fetchAllCoinsFromApi(ExchangeType exchange) {
+        long timestamp = System.currentTimeMillis();
+        int recvWindow = 5000;
+        String params = "timestamp=" + timestamp + "&recvWindow=" + recvWindow;
+        String signature = hmacSHA256Hex(apiProperties.getSecret(), params);
+        String url = apiProperties.getSpotConfigPath() + "?" + params + "&signature=" + signature;
 
         try {
-            long timestamp = System.currentTimeMillis();
-            int recvWindow = 5000;
-            String params = "timestamp=" + timestamp + "&recvWindow=" + recvWindow;
-
-            String signature = hmacSHA256Hex(apiProperties.getSecret(), params);
-
-            String url = "/api/v3/capital/config/getall?" + params + "&signature=" + signature;
-
-            String response = webClient.get()
+            return webClient.get()
                     .uri(url)
                     .header("X-MEXC-APIKEY", apiProperties.getKey())
                     .retrieve()
                     .bodyToMono(String.class)
-                    .timeout(Duration.ofSeconds(60))
+                    .timeout(Duration.ofSeconds(apiProperties.getResponseTimeoutSeconds()))
                     .onErrorResume(e -> {
                         log.error("Ошибка при вызове {} API: {}", exchange.name(), e.getMessage(), e);
                         return Mono.just("");
                     })
                     .block();
+        } catch (Exception e) {
+            log.error("Ошибка при запросе к MEXC API: ", e);
+            return null;
+        }
+    }
 
-            if (response == null || response.isEmpty()) return stub();
-
-            JSONArray arr = new JSONArray(response);
-            JSONObject coinObj = null;
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject o = arr.getJSONObject(i);
-                if (coin.equalsIgnoreCase(o.optString("coin"))) {
-                    coinObj = o;
-                    break;
-                }
-            }
+    private TradingInfoDTO parseTradingInfoForCoin(String json, String coin) {
+        try {
+            JSONArray arr = new JSONArray(json);
+            JSONObject coinObj = findCoinObject(arr, coin);
             if (coinObj == null) return stub();
 
-            JSONArray networkList = coinObj.optJSONArray("networkList");
-            if (networkList == null || networkList.isEmpty()) return stub();
-
-            List<TradingNetworkInfoDTO> networks = new ArrayList<>();
-            for (int i = 0; i < networkList.length(); i++) {
-                JSONObject net = networkList.getJSONObject(i);
-                String networkRaw = net.optString("network", net.optString("netWork"));
-                String network = normalize(networkRaw);
-                boolean depositEnable = net.optBoolean("depositEnable", false);
-                boolean withdrawEnable = net.optBoolean("withdrawEnable", false);
-                double withdrawFee = -1;
-                if (net.has("withdrawFee")) {
-                    try {
-                        withdrawFee = Double.parseDouble(net.optString("withdrawFee", "-1"));
-                    } catch (Exception ignore) {
-                    }
-                }
-                networks.add(new TradingNetworkInfoDTO(network, withdrawFee, depositEnable, withdrawEnable));
-            }
-
-            TradingInfoDTO dto = new TradingInfoDTO(networks);
-            ops.set(redisKey, dto, 24, TimeUnit.HOURS);
-            return dto;
+            return buildTradingInfoFromJson(coinObj);
         } catch (Exception ex) {
-            ex.printStackTrace();
+            log.error("Ошибка парсинга MEXC: ", ex);
             return stub();
         }
     }
 
-    private String hmacSHA256Hex(String key, String data) throws Exception {
-        Mac sha256_HMAC = Mac.getInstance("HmacSHA256");
-        SecretKeySpec secret_key = new SecretKeySpec(key.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
-        sha256_HMAC.init(secret_key);
-
-        byte[] hash = sha256_HMAC.doFinal(data.getBytes(StandardCharsets.UTF_8));
-        StringBuilder hexString = new StringBuilder(2 * hash.length);
-        for (byte b : hash) {
-            String hex = Integer.toHexString(0xff & b);
-            if (hex.length() == 1) hexString.append('0');
-            hexString.append(hex);
+    private JSONObject findCoinObject(JSONArray arr, String coin) {
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.getJSONObject(i);
+            if (coin.equalsIgnoreCase(o.optString("coin"))) {
+                return o;
+            }
         }
-        return hexString.toString();
+        return null;
+    }
+
+    private TradingInfoDTO buildTradingInfoFromJson(JSONObject coinObj) {
+        JSONArray networkList = coinObj.optJSONArray("networkList");
+        if (networkList == null || networkList.isEmpty()) return stub();
+
+        List<TradingNetworkInfoDTO> networks = new ArrayList<>();
+        for (int i = 0; i < networkList.length(); i++) {
+            JSONObject net = networkList.getJSONObject(i);
+            networks.add(parseNetwork(net));
+        }
+        return new TradingInfoDTO(networks);
+    }
+
+    private TradingNetworkInfoDTO parseNetwork(JSONObject net) {
+        String networkRaw = net.optString("network", net.optString("netWork"));
+        String network = normalize(networkRaw);
+        boolean depositEnable = net.optBoolean("depositEnable", false);
+        boolean withdrawEnable = net.optBoolean("withdrawEnable", false);
+        double withdrawFee = -1;
+        if (net.has("withdrawFee")) {
+            try {
+                withdrawFee = Double.parseDouble(net.optString("withdrawFee", "-1"));
+            } catch (Exception ignore) {
+            }
+        }
+        return new TradingNetworkInfoDTO(network, withdrawFee, depositEnable, withdrawEnable);
     }
 
     private TradingInfoDTO stub() {
         return new TradingInfoDTO(List.of(
-                new TradingNetworkInfoDTO("N/A", -1.0, false, false)
+                new TradingNetworkInfoDTO("", -1.0, false, false)
         ));
     }
-
 }
