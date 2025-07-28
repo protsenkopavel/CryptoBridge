@@ -5,11 +5,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import net.protsenko.spotfetchprice.dto.ExchangeTickersDTO;
+import net.protsenko.spotfetchprice.dto.TickerDTO;
 import net.protsenko.spotfetchprice.dto.TradingInfoDTO;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
@@ -17,19 +19,20 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 public class RedisConfig {
 
     @Bean
+    public RedisTemplate<String, TickerDTO> tickerRedisTemplate(RedisConnectionFactory connectionFactory) {
+        RedisTemplate<String, TickerDTO> template = new RedisTemplate<>();
+        template.setConnectionFactory(connectionFactory);
+        template.setKeySerializer(new org.springframework.data.redis.serializer.StringRedisSerializer());
+        template.setValueSerializer(new org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer());
+        return template;
+    }
+
+    @Bean
     public RedisTemplate<String, ExchangeTickersDTO> exchangeTickersRedisTemplate(RedisConnectionFactory connectionFactory) {
         RedisTemplate<String, ExchangeTickersDTO> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
-
-        Jackson2JsonRedisSerializer<ExchangeTickersDTO> serializer = new Jackson2JsonRedisSerializer<>(ExchangeTickersDTO.class);
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule());
-        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-        serializer.setObjectMapper(mapper);
-
-        template.setDefaultSerializer(serializer);
-        template.afterPropertiesSet();
+        template.setKeySerializer(new StringRedisSerializer());
+        template.setValueSerializer(new GenericJackson2JsonRedisSerializer());
         return template;
     }
 

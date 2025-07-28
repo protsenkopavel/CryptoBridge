@@ -26,13 +26,20 @@ import java.util.stream.Collectors;
 public class ExchangeService {
 
     private static final long CACHE_TTL_SECONDS = 300;
+    private static final int BULK_THRESHOLD = 40;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
-    private final ValueOperations<String, ExchangeTickersDTO> valueOps;
+    private final ValueOperations<String, TickerDTO> tickerValueOps;
+    private final ValueOperations<String, ExchangeTickersDTO> bulkValueOps;
     private final ExchangeClientFactory exchangeClientFactory;
     private final Map<ExchangeType, ExchangeClientHolder> exchangeClients = new ConcurrentHashMap<>();
 
-    public ExchangeService(RedisTemplate<String, ExchangeTickersDTO> redisTemplate, ExchangeClientFactory exchangeClientFactory) {
-        this.valueOps = redisTemplate.opsForValue();
+    public ExchangeService(
+            RedisTemplate<String, TickerDTO> tickerRedisTemplate,
+            RedisTemplate<String, ExchangeTickersDTO> bulkRedisTemplate,
+            ExchangeClientFactory exchangeClientFactory
+    ) {
+        this.tickerValueOps = tickerRedisTemplate.opsForValue();
+        this.bulkValueOps = bulkRedisTemplate.opsForValue();
         this.exchangeClientFactory = exchangeClientFactory;
     }
 
@@ -52,45 +59,89 @@ public class ExchangeService {
         }
     }
 
-    public List<ExchangeTickersDTO> getAllMarketDataForAllExchanges(
+    public Map<ExchangeType, Map<CurrencyPair, TickerDTO>> getAllMarketDataForAllExchanges(
             List<ExchangeType> exchanges,
-            List<CurrencyPair> instruments
+            List<CurrencyPair> currencyPairs
     ) {
         List<ExchangeType> exchangeTypes = normalizeExchanges(exchanges);
 
-        List<CompletableFuture<ExchangeTickersDTO>> futures = exchangeTypes.stream()
-                .map(exchangeType -> CompletableFuture.supplyAsync(
-                        () -> fetchExchangeTickers(exchangeType, instruments), executor)
-                )
+        Map<ExchangeType, Map<CurrencyPair, TickerDTO>> result = new HashMap<>();
+
+        List<CompletableFuture<Void>> futures = exchangeTypes.stream()
+                .map(exchangeType -> CompletableFuture.runAsync(() -> {
+                    Map<CurrencyPair, TickerDTO> tickers = getMarketDataForExchange(exchangeType, currencyPairs);
+                    synchronized (result) {
+                        result.put(exchangeType, tickers);
+                    }
+                }, executor))
                 .toList();
 
-        return futures.stream()
-                .map(CompletableFuture::join)
-                .filter(Objects::nonNull)
-                .toList();
+        futures.forEach(CompletableFuture::join);
+
+        return result;
     }
 
-    private ExchangeTickersDTO fetchExchangeTickers(ExchangeType exchangeType, List<CurrencyPair> instruments) {
-        try {
-            String cacheKey = generateCacheKey(exchangeType, instruments);
+    public Map<CurrencyPair, TickerDTO> getMarketDataForExchange(ExchangeType exchangeType, List<CurrencyPair> pairs) {
+        if (pairs.size() > BULK_THRESHOLD) {
+            String bulkKey = exchangeType.name() + ":ALL";
+            ExchangeTickersDTO allTickers = bulkValueOps.get(bulkKey);
 
-            ExchangeTickersDTO cachedData = valueOps.get(cacheKey);
-            if (cachedData != null) {
-                log.debug("Cache hit for key {}", cacheKey);
-                return cachedData;
+            if (allTickers != null && allTickers.tickers() != null && !allTickers.tickers().isEmpty()) {
+                log.debug("Bulk cache hit for {}", bulkKey);
+                return allTickers.tickers().stream()
+                        .filter(t -> pairs.contains(new CurrencyPair(t.baseCurrency(), t.counterCurrency())))
+                        .collect(Collectors.toMap(
+                                t -> new CurrencyPair(t.baseCurrency(), t.counterCurrency()),
+                                t -> t
+                        ));
             }
+            try {
+                ExchangeClient client = getOrCreateExchangeClient(exchangeType);
+                List<TickerDTO> freshTickers = client.getTickers(List.of()); // Пустой список = все пары
+                bulkValueOps.set(bulkKey, new ExchangeTickersDTO(exchangeType.name(), freshTickers), Duration.ofSeconds(CACHE_TTL_SECONDS));
+                log.debug("Bulk cache set for {}", bulkKey);
+                return freshTickers.stream()
+                        .filter(t -> pairs.contains(new CurrencyPair(t.baseCurrency(), t.counterCurrency())))
+                        .collect(Collectors.toMap(
+                                t -> new CurrencyPair(t.baseCurrency(), t.counterCurrency()),
+                                t -> t
+                        ));
+            } catch (Exception e) {
+                log.error("Ошибка bulk-запроса у {}: {}", exchangeType, e.getMessage());
+                return Collections.emptyMap();
+            }
+        } else {
+            List<String> keys = pairs.stream()
+                    .map(pair -> generateCacheKey(exchangeType, pair))
+                    .toList();
 
-            ExchangeClient client = getOrCreateExchangeClient(exchangeType);
-            List<TickerDTO> tickerDTOs = client.getTickers(instruments);
+            List<TickerDTO> cachedTickers = tickerValueOps.multiGet(keys);
+            Map<CurrencyPair, TickerDTO> result = new HashMap<>();
+            List<CurrencyPair> missingPairs = new ArrayList<>();
 
-            ExchangeTickersDTO dto = new ExchangeTickersDTO(exchangeType.name(), tickerDTOs);
-            valueOps.set(cacheKey, dto, Duration.ofSeconds(CACHE_TTL_SECONDS));
-            log.debug("Cache set for key {}", cacheKey);
-
-            return dto;
-        } catch (Exception e) {
-            log.error("Error processing exchange {}: {}", exchangeType, e.getMessage(), e);
-            return null;
+            for (int i = 0; i < pairs.size(); i++) {
+                TickerDTO ticker = cachedTickers.get(i);
+                if (ticker != null) {
+                    result.put(pairs.get(i), ticker);
+                } else {
+                    missingPairs.add(pairs.get(i));
+                }
+            }
+            if (!missingPairs.isEmpty()) {
+                try {
+                    ExchangeClient client = getOrCreateExchangeClient(exchangeType);
+                    List<TickerDTO> freshTickers = client.getTickers(missingPairs);
+                    for (TickerDTO ticker : freshTickers) {
+                        CurrencyPair pair = new CurrencyPair(ticker.baseCurrency(), ticker.counterCurrency());
+                        String cacheKey = generateCacheKey(exchangeType, pair);
+                        tickerValueOps.set(cacheKey, ticker, Duration.ofSeconds(CACHE_TTL_SECONDS));
+                        result.put(pair, ticker);
+                    }
+                } catch (Exception e) {
+                    log.error("Ошибка получения тикеров у {}: {}", exchangeType, e.getMessage());
+                }
+            }
+            return result;
         }
     }
 
@@ -171,17 +222,8 @@ public class ExchangeService {
         }
     }
 
-    private String generateCacheKey(ExchangeType exchangeType, List<CurrencyPair> instruments) {
-        if (instruments == null || instruments.isEmpty()) {
-            return exchangeType.name() + ":ALL";
-        }
-
-        String instrumentsKey = instruments.stream()
-                .map(CurrencyPair::toString)
-                .sorted()
-                .collect(Collectors.joining(","));
-
-        return exchangeType.name() + ":" + instrumentsKey;
+    private String generateCacheKey(ExchangeType exchangeType, CurrencyPair pair) {
+        return exchangeType.name() + ":" + pair.toString();
     }
 
 }

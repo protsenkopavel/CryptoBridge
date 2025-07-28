@@ -33,23 +33,34 @@ public class PriceSpreadService {
 
         currencyPairs = filterCurrencyPairs(currencyPairs, spreadsRq.whitelist(), spreadsRq.blacklist());
 
-        List<ExchangeTickersDTO> allTickers = exchangeService.getAllMarketDataForAllExchanges(exchangeTypes, currencyPairs);
+        Map<ExchangeType, Map<CurrencyPair, TickerDTO>> allTickersByExchange =
+                exchangeService.getAllMarketDataForAllExchanges(exchangeTypes, currencyPairs);
 
-        Map<CurrencyPair, Map<String, TickerData>> tickersByPair = new HashMap<>();
-        for (ExchangeTickersDTO exchangeTickers : allTickers) {
-            if (exchangeTickers == null || exchangeTickers.tickers() == null) continue;
-            for (TickerDTO ticker : exchangeTickers.tickers()) {
+        Map<CurrencyPair, Map<ExchangeType, TickerDTO>> tickersByPair = new HashMap<>();
+        for (var exchangeEntry : allTickersByExchange.entrySet()) {
+            ExchangeType exchangeType = exchangeEntry.getKey();
+            Map<CurrencyPair, TickerDTO> pairMap = exchangeEntry.getValue();
+            for (var pairEntry : pairMap.entrySet()) {
+                CurrencyPair pair = pairEntry.getKey();
+                TickerDTO ticker = pairEntry.getValue();
                 if (ticker.bid() > 0 && ticker.ask() > 0 && ticker.volume() >= spreadsRq.minVolume()) {
-                    CurrencyPair pair = new CurrencyPair(ticker.baseCurrency(), ticker.counterCurrency());
-                    tickersByPair
-                            .computeIfAbsent(pair, k -> new HashMap<>())
-                            .put(exchangeTickers.exchangeName(), new TickerData(ticker.bid(), ticker.ask(), ticker.volume()));
+                    tickersByPair.computeIfAbsent(pair, k -> new HashMap<>())
+                            .put(exchangeType, ticker);
                 }
             }
         }
 
         return tickersByPair.entrySet().parallelStream()
-                .map(entry -> findMaxSpread(entry.getKey(), entry.getValue(), spreadsRq.minProfitPercent(), spreadsRq.maxProfitPercent()))
+                .map(entry -> {
+                    CurrencyPair pair = entry.getKey();
+                    Map<ExchangeType, TickerDTO> tickerMap = entry.getValue();
+                    Map<String, TickerData> dataMap = tickerMap.entrySet().stream()
+                            .collect(Collectors.toMap(
+                                    e -> e.getKey().name(),
+                                    e -> new TickerData(e.getValue().bid(), e.getValue().ask(), e.getValue().volume())
+                            ));
+                    return findMaxSpread(pair, dataMap, spreadsRq.minProfitPercent(), spreadsRq.maxProfitPercent());
+                })
                 .filter(Optional::isPresent)
                 .map(Optional::get)
                 .collect(Collectors.toList());
@@ -76,24 +87,18 @@ public class PriceSpreadService {
             double minProfitPercent,
             double maxProfitPercent
     ) {
-        List<ExchangeTickersDTO> tickersByExchange = exchangeService.getAllMarketDataForAllExchanges(
-                exchanges,
-                List.of(pair)
-        );
+        Map<ExchangeType, Map<CurrencyPair, TickerDTO>> tickersByExchange =
+                exchangeService.getAllMarketDataForAllExchanges(exchanges, List.of(pair));
 
         Map<String, TickerData> tickerDataMap = new HashMap<>();
 
-        for (ExchangeTickersDTO dto : tickersByExchange) {
-            if (dto == null || dto.tickers() == null) continue;
-
-            dto.tickers().stream()
-                    .filter(tickerDTO -> pair.equals(new CurrencyPair(tickerDTO.baseCurrency(), tickerDTO.counterCurrency())))
-                    .findFirst()
-                    .ifPresent(ticker -> {
-                        if (ticker.bid() > 0 && ticker.ask() > 0 && ticker.volume() >= minVolume) {
-                            tickerDataMap.put(dto.exchangeName(), new TickerData(ticker.bid(), ticker.ask(), ticker.volume()));
-                        }
-                    });
+        for (Map.Entry<ExchangeType, Map<CurrencyPair, TickerDTO>> entry : tickersByExchange.entrySet()) {
+            ExchangeType exchangeType = entry.getKey();
+            Map<CurrencyPair, TickerDTO> pairMap = entry.getValue();
+            TickerDTO ticker = pairMap.get(pair);
+            if (ticker != null && ticker.bid() > 0 && ticker.ask() > 0 && ticker.volume() >= minVolume) {
+                tickerDataMap.put(exchangeType.name(), new TickerData(ticker.bid(), ticker.ask(), ticker.volume()));
+            }
         }
 
         if (tickerDataMap.size() < 2) {
